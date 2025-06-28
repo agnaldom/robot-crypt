@@ -7,6 +7,7 @@ import hmac
 import hashlib
 import requests
 import logging
+import os
 from urllib.parse import urlencode
 
 class BinanceAPI:
@@ -25,6 +26,27 @@ class BinanceAPI:
             self.base_url = "https://api.binance.com/api"
         
         self.logger = logging.getLogger("robot-crypt")
+        
+        # Configurações de proxy do ambiente
+        self.proxies = {}
+        
+        # Configura proxies a partir das variáveis de ambiente
+        http_proxy = os.environ.get('HTTP_PROXY', '')
+        https_proxy = os.environ.get('HTTPS_PROXY', '')
+        
+        if http_proxy:
+            self.proxies['http'] = http_proxy
+            self.logger.info(f"Usando HTTP proxy: {http_proxy}")
+        
+        if https_proxy:
+            self.proxies['https'] = https_proxy
+            self.logger.info(f"Usando HTTPS proxy: {https_proxy}")
+            
+        # Log de uso de proxy
+        if self.proxies:
+            self.logger.info("Conexão através de proxy configurada")
+        else:
+            self.logger.debug("Conexão direta (sem proxy)")
         
         # Log de inicialização com informações parciais da chave para debug
         if self.api_key:
@@ -55,7 +77,8 @@ class BinanceAPI:
             raise ValueError(error_msg)
         
         headers = {
-            'X-MBX-APIKEY': self.api_key
+            'X-MBX-APIKEY': self.api_key,
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
         }
         
         if params is None:
@@ -74,11 +97,11 @@ class BinanceAPI:
             self.logger.debug(f"Enviando requisição {method} para {url}")
             
             if method == 'GET':
-                response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
             elif method == 'POST':
-                response = requests.post(url, headers=headers, params=params)
+                response = requests.post(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
             elif method == 'DELETE':
-                response = requests.delete(url, headers=headers, params=params)
+                response = requests.delete(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
             else:
                 raise ValueError(f"Método HTTP não suportado: {method}")
             
@@ -104,6 +127,14 @@ class BinanceAPI:
             if self.testnet and hasattr(e, 'response') and e.response.status_code == 401:
                 self.logger.error("IMPORTANTE: Para usar a testnet da Binance, você precisa de credenciais específicas da testnet.")
                 self.logger.error("Obtenha credenciais em: https://testnet.binance.vision/")
+            
+            # Se for erro 451, indica restrição de IP/região
+            if hasattr(e, 'response') and e.response.status_code == 451:
+                self.logger.error("ERRO 451: Este erro indica que seu acesso está sendo bloqueado devido a restrições de IP ou região.")
+                self.logger.error("Soluções possíveis:")
+                self.logger.error("1. Configure um proxy/VPN em seu deployment")
+                self.logger.error("2. Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY")
+                self.logger.error("3. Considere usar um provedor de hospedagem em uma região permitida pela Binance")
             
             raise
     
@@ -195,12 +226,28 @@ class BinanceAPI:
             try:
                 # Fazemos o request manualmente para evitar exceções neste estágio
                 url = f"{self.base_url}{endpoint}"
-                response = requests.get(url)
+                response = requests.get(
+                    url, 
+                    proxies=self.proxies, 
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    },
+                    timeout=30
+                )
                 response.raise_for_status()
                 result = response.json()
                 self.logger.info("✓ Conexão básica com a API estabelecida")
             except Exception as e:
                 self.logger.error(f"✗ Falha na conexão básica: {str(e)}")
+                
+                # Se for erro 451, indica restrição de IP/região
+                if hasattr(e, 'response') and e.response.status_code == 451:
+                    self.logger.error("ERRO 451: Este erro indica que seu acesso está sendo bloqueado devido a restrições de IP ou região.")
+                    self.logger.error("Soluções possíveis:")
+                    self.logger.error("1. Configure um proxy/VPN em seu deployment")
+                    self.logger.error("2. Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY")
+                    self.logger.error("3. Considere usar um provedor de hospedagem em uma região permitida pela Binance")
+                
                 return False
             
             # Teste 2: Verificando tempo do servidor
@@ -228,10 +275,13 @@ class BinanceAPI:
                     params['signature'] = self._generate_signature(params)
                     
                     url = f"{self.base_url}{endpoint}"
-                    headers = {'X-MBX-APIKEY': self.api_key}
+                    headers = {
+                        'X-MBX-APIKEY': self.api_key,
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    }
                     
                     self.logger.debug(f"Enviando requisição de teste para: {url}")
-                    response = requests.get(url, headers=headers, params=params)
+                    response = requests.get(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
                     
                     # Log detalhado para debug
                     self.logger.debug(f"Status: {response.status_code}")

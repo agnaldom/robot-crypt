@@ -1,0 +1,17 @@
+# Configuração para Railway
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Especificar variáveis de ambiente aqui
+# Em Railway, configure estas variáveis no dashboard ou via CLI
+[variables]
+HTTP_PROXY = "" # Preencha com proxy SOCKS5, HTTP ou HTTPS se necessário
+HTTPS_PROXY = "" # Preencha com proxy SOCKS5, HTTP ou HTTPS se necessário
