@@ -48,7 +48,48 @@ class Config:
         take_profit_percentage = os.environ.get("TAKE_PROFIT_PERCENTAGE")
         stop_loss_percentage = os.environ.get("STOP_LOSS_PERCENTAGE")
         max_hold_time = os.environ.get("MAX_HOLD_TIME")
-        entry_delay = os.environ.get("ENTRY_DELAY")
+        entry_delay = os.environ.get("ENTRY_DELAY")  # Adicionado para corrigir erro
+        
+        # Carrega pares de trading do arquivo .env
+        trading_pairs_str = os.environ.get("TRADING_PAIRS", "")
+        self.trading_pairs = []
+        
+        # Lista de pares disponíveis na TestNet da Binance
+        testnet_supported_pairs = [
+            "BTC/USDT", "ETH/USDT", "BNB/USDT", "TRX/USDT", "XRP/USDT", 
+            "LTC/USDT", "BCH/USDT", "EOS/USDT", "ADA/USDT", "DOT/USDT",
+            "LINK/USDT", "BTC/BUSD", "ETH/BUSD", "BNB/BUSD", "BTC/ETH",
+            "BNB/BTC", "ETH/BTC"
+        ]
+        
+        if trading_pairs_str:
+            # Converte de BNBUSDT para BNB/USDT (formato aceito pela API)
+            raw_pairs = trading_pairs_str.split(",")
+            for pair in raw_pairs:
+                pair = pair.strip()
+                if len(pair) >= 6:  # Pelo menos 3 letras para cada símbolo
+                    # Descobre o ponto de divisão (geralmente XXXYYY onde XXX é a base e YYY é a cotação)
+                    for i in range(3, len(pair) - 2):
+                        # Tenta fazer a divisão em pontos comuns (BTC, ETH, USDT, BRL, etc)
+                        if pair[i:i+3] in ["BTC", "ETH", "USD", "BRL", "BNB", "EUR"]:
+                            formatted_pair = f"{pair[:i]}/{pair[i:]}"
+                            
+                            # Se estiver em modo testnet, só adiciona pares suportados
+                            if self.use_testnet:
+                                if formatted_pair in testnet_supported_pairs:
+                                    self.trading_pairs.append(formatted_pair)
+                                else:
+                                    print(f"Aviso: Par {formatted_pair} ignorado porque não é suportado na TestNet")
+                            else:
+                                self.trading_pairs.append(formatted_pair)
+                            break
+                    else:
+                        # Se não conseguir dividir, usa o formato original
+                        self.trading_pairs.append(pair)
+        
+        # Log dos pares de trading carregados
+        if self.trading_pairs:
+            print(f"Pares de trading carregados do .env: {self.trading_pairs}")
         
         # Estratégia de Scalping (Fase 2)
         self.scalping = {
@@ -123,20 +164,39 @@ class Config:
         if not account_info or not isinstance(account_info, dict):
             return 100.0  # Valor padrão para simulação
         
-        # Procura por BRL no ambiente de produção
+        # Taxas de conversão aproximadas para BRL
+        conversion_rates = {
+            'BRL': 1.0,
+            'USDT': 5.0,       # 1 USDT ≈ 5 BRL
+            'BTC': 150000.0,   # 1 BTC ≈ 150,000 BRL
+            'ETH': 8500.0,     # 1 ETH ≈ 8,500 BRL
+            'BNB': 2250.0      # 1 BNB ≈ 2,250 BRL
+        }
+        
+        # Pega os saldos da conta
         if 'balances' in account_info:
             for asset in account_info['balances']:
-                if asset['asset'] == 'BRL':
-                    balance += float(asset['free']) + float(asset['locked'])
-                # Na testnet geralmente temos USDT ou BTC, não BRL
-                elif self.use_testnet and asset['asset'] in ['USDT', 'BTC'] and balance == 0:
-                    # Converte USDT para BRL com uma taxa aproximada (1 USDT ≈ 5 BRL)
-                    conversion_rate = 5.0 if asset['asset'] == 'USDT' else 150000.0  # Taxa BTC/BRL aproximada
-                    asset_balance = float(asset['free']) + float(asset['locked'])
-                    balance += asset_balance * conversion_rate
+                asset_name = asset['asset']
+                asset_balance = float(asset['free']) + float(asset['locked'])
+                
+                # Só considera ativos com saldo positivo
+                if asset_balance > 0:
+                    # Se temos taxa de conversão para esse ativo
+                    if asset_name in conversion_rates:
+                        balance += asset_balance * conversion_rates[asset_name]
+                        print(f"Saldo de {asset_name}: {asset_balance} = {asset_balance * conversion_rates[asset_name]} BRL")
+                    # Para outros ativos, tentamos uma estimativa conservadora
+                    elif asset_balance > 0:
+                        # Assumimos um valor conservador de 1 BRL por unidade para ativos desconhecidos
+                        # Se for um altcoin, isso pode estar subestimado, mas é melhor que ignorar
+                        estimated_value = asset_balance * 1.0  # valor conservador
+                        balance += estimated_value
+                        print(f"Saldo de {asset_name}: {asset_balance} (valor estimado: {estimated_value} BRL)")
         
-        # Se não encontramos saldo, usar valor padrão para simulação
+        # Se ainda não encontramos saldo, usar valor padrão para simulação
         if balance == 0:
             balance = 100.0
+            print("Nenhum saldo detectado, usando valor padrão para simulação: 100.0 BRL")
             
+        print(f"Saldo total estimado: {balance:.2f} BRL")
         return balance

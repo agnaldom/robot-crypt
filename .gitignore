@@ -33,6 +33,8 @@ trading_bot.log
 # Credentials and sensitive data
 .env
 .env.backup
+.env.real
+.env.test
 config_prod.py
 
 # IDE

@@ -24,26 +24,36 @@ class TelegramNotifier:
                 "text": message,
                 "parse_mode": "Markdown"  # Suporte para formatação básica
             }
+            self.logger.info(f"Enviando mensagem para Telegram - URL: {url}")
+            self.logger.info(f"Dados: chat_id={self.chat_id}, texto={message[:50]}...")
             response = requests.post(url, data=data)
+            self.logger.info(f"Status code resposta: {response.status_code}")
+            self.logger.info(f"Resposta: {response.text[:100]}")
             response.raise_for_status()
+            self.logger.info("Mensagem enviada com sucesso!")
             return True
         except Exception as e:
             self.logger.error(f"Erro ao enviar notificação Telegram: {str(e)}")
             return False
     
-    def notify_trade(self, symbol, action, price, quantity, profit=None):
-        """Envia notificação sobre uma operação de trade"""
-        action_emoji = "🟢 COMPRA" if action.lower() == "buy" else "🔴 VENDA"
+    def notify_trade(self, title, detail_message=None):
+        """
+        Envia notificação sobre uma operação de trade
         
-        message = f"*{action_emoji} - {symbol}*\n"
-        message += f"Preço: R$ {price:.2f}\n"
-        message += f"Quantidade: {quantity:.8f}\n"
-        
-        if profit is not None:
-            profit_emoji = "✅" if profit >= 0 else "❌"
-            message += f"Resultado: {profit_emoji} {profit:.2%}\n"
-        
-        return self.send_message(message)
+        Args:
+            title (str): Título da notificação (ex: "� COMPRA de BTC/USDT")
+            detail_message (str): Detalhes da operação (ex: "Preço: 40000.00\nQuantidade: 0.001")
+        """
+        try:
+            message = f"*{title}*\n"
+            if detail_message:
+                message += detail_message
+                
+            self.logger.info(f"Enviando notificação Telegram: {title}")
+            return self.send_message(message)
+        except Exception as e:
+            self.logger.error(f"Erro ao formatar notificação de trade: {str(e)}")
+            return False
     
     def notify_error(self, error_message):
         """Envia notificação sobre um erro"""
@@ -82,3 +92,30 @@ class TelegramNotifier:
             
         formatted_message = f"{alert_emoji} *ALERTA DE MERCADO - {symbol}*\n{message}"
         return self.send_message(formatted_message)
+        
+    def notify_analysis(self, symbol, data_type, details):
+        """
+        Envia notificação sobre uma análise de mercado
+        
+        Args:
+            symbol (str): O par de moedas analisado (ex: "BTC/USDT")
+            data_type (str): Tipo de análise (ex: "Volume", "RSI", "MACD")
+            details (str): Detalhes da análise
+        """
+        try:
+            emoji = "🔍"
+            if data_type.lower() == "volume":
+                emoji = "📊"
+            elif data_type.lower() == "price":
+                emoji = "💲"
+            elif data_type.lower() == "indicator":
+                emoji = "📈"
+                
+            message = f"{emoji} *ANÁLISE - {symbol}*\n"
+            message += f"*Tipo*: {data_type}\n"
+            message += f"{details}"
+            
+            return self.send_message(message)
+        except Exception as e:
+            self.logger.error(f"Erro ao enviar notificação de análise: {str(e)}")
+            return False

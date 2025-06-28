@@ -82,8 +82,11 @@ class ScalpingStrategy(TradingStrategy):
         - Tendência de curto prazo
         """
         try:
+            # Formata o símbolo corretamente para a API
+            api_symbol = symbol.replace('/', '')  # Remove a barra (ex: "BTC/USDT" -> "BTCUSDT")
+            
             # Obtém dados de velas do período especificado
-            klines = self.binance.get_klines(symbol, period, lookback)
+            klines = self.binance.get_klines(api_symbol, period, lookback)
             
             # Extrai preços de fechamento
             closes = [float(k[4]) for k in klines]
@@ -133,10 +136,14 @@ class ScalpingStrategy(TradingStrategy):
         # Está próximo do suporte se a diferença for menor que o threshold
         return percent_to_support <= threshold and percent_to_support >= 0
     
-    def analyze_market(self, symbol):
+    def analyze_market(self, symbol, notifier=None):
         """Analisa o mercado usando estratégia de scalping
         
         Implementa os critérios da Fase 2 (R$100 → R$300):
+        
+        Args:
+            symbol (str): O par de moedas para análise
+            notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
         - Compra quando BTC/ETH cai -1.5% em 1h e está em suporte diário
         - Vende com lucro de 2-3%
         - Stop loss em 0.5% abaixo do suporte
@@ -220,9 +227,12 @@ class ScalpingStrategy(TradingStrategy):
             self.logger.info(f"Comprando {quantity:.8f} de {symbol} a {price:.2f}")
             self.logger.info(f"Valor: R${position_value:.2f} | Capital: R${capital:.2f} | Taxas: R${position_value * fee_cost:.2f}")
             
+            # Formata o símbolo para a API
+            api_symbol = symbol.replace('/', '')
+            
             # Coloca ordem LIMIT com GTC (Good Till Cancelled)
             order = self.binance.create_order(
-                symbol=symbol,
+                symbol=api_symbol,
                 side="BUY",
                 type="LIMIT",
                 quantity=quantity,
@@ -274,9 +284,12 @@ class ScalpingStrategy(TradingStrategy):
             # Executa ordem de venda
             self.logger.info(f"Vendendo {quantity:.8f} de {symbol} a {price:.2f}")
             
+            # Formata o símbolo para a API
+            api_symbol = symbol.replace('/', '')
+            
             # Coloca ordem LIMIT com GTC (Good Till Cancelled)
             order = self.binance.create_order(
-                symbol=symbol,
+                symbol=api_symbol,
                 side="SELL",
                 type="LIMIT",
                 quantity=quantity,
@@ -355,57 +368,120 @@ class SwingTradingStrategy(TradingStrategy):
     def update_altcoins_list(self):
         """Atualiza a lista de altcoins abaixo de R$1.00 com boa liquidez"""
         try:
-            # Na implementação real, isso consultaria a API da Binance
-            # e filtraria moedas abaixo de R$1.00 com volume mínimo
-            # Para demonstração, listamos algumas moedas populares
-            self.altcoins_under_1_brl = ["SHIB/BRL", "FLOKI/BRL", "DOGE/BRL", "XRP/BRL", "ADA/BRL"]
-            self.logger.info(f"Lista de altcoins atualizada: {len(self.altcoins_under_1_brl)} moedas")
+            # Verifica se estamos usando testnet
+            is_testnet = hasattr(self.config, 'use_testnet') and self.config.use_testnet
+            
+            if is_testnet:
+                # Para testnet, usamos pares disponíveis com USDT
+                self.altcoins_under_1_brl = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"]
+                self.logger.info(f"Lista de altcoins para testnet atualizada: {len(self.altcoins_under_1_brl)} moedas")
+            else:
+                # Na implementação real, isso consultaria a API da Binance
+                # e filtraria moedas abaixo de R$1.00 com volume mínimo
+                # Para demonstração, listamos algumas moedas populares
+                self.altcoins_under_1_brl = ["SHIB/BRL", "FLOKI/BRL", "DOGE/BRL", "XRP/BRL", "ADA/BRL"]
+                self.logger.info(f"Lista de altcoins atualizada: {len(self.altcoins_under_1_brl)} moedas")
         except Exception as e:
             self.logger.error(f"Erro ao atualizar lista de altcoins: {str(e)}")
     
-    def check_volume_increase(self, symbol, threshold=0.30):
+    def check_volume_increase(self, symbol, threshold=0.30, notifier=None):
         """Verifica se o volume da moeda aumentou acima do threshold (30% por padrão)
         
         Args:
             symbol (str): Par de trading para verificar
             threshold (float): Percentual mínimo de aumento (0.30 = 30%)
+            notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
         
         Returns:
             bool: True se o volume aumentou mais que o threshold, False caso contrário
         """
+        start_time = datetime.now()
+        self.logger.info(f"Verificando aumento de volume para {symbol} (threshold: {threshold:.2%})")
+        
+        # Validação de entrada
+        if not symbol or not isinstance(symbol, str):
+            self.logger.error(f"Símbolo inválido: {symbol}")
+            return False
+            
+        if threshold < 0:
+            self.logger.warning(f"Threshold negativo ({threshold:.2%}) para {symbol}. Usando valor absoluto.")
+            threshold = abs(threshold)
+        
         try:
-            volume_data = self.get_volume_data(symbol)
+            # Obter dados de volume usando abstração para testes
+            volume_data = self.get_volume_data(symbol, notifier=notifier)
+            
+            # Validação dos dados recebidos
             if not volume_data:
+                self.logger.warning(f"Nenhum dado de volume disponível para {symbol}")
                 return False
                 
-            # Se temos os dados de volume já calculados, usamos
+            # Diferentes formas de obter o aumento de volume
             if 'volume_increase' in volume_data:
+                # Caso 1: O aumento já está calculado (útil para testes mockados)
                 volume_increase = volume_data['volume_increase']
-            # Se não, calculamos a partir da média e volume atual
+                self.logger.debug(f"{symbol} - Usando volume_increase pré-calculado: {volume_increase:.2%}")
+                
+            # Caso 2: Temos média e volume atual para calcular o aumento
             elif 'avg_volume' in volume_data and 'current_volume' in volume_data:
                 avg_volume = volume_data['avg_volume']
                 current_volume = volume_data['current_volume']
+                
+                # Proteção contra divisão por zero
+                if avg_volume <= 0:
+                    self.logger.warning(f"{symbol} - Volume médio é zero ou negativo: {avg_volume}")
+                    return False
+                
                 volume_increase = (current_volume - avg_volume) / avg_volume
+                self.logger.debug(f"{symbol} - Volume atual: {current_volume:.2f}, Média: {avg_volume:.2f}")
+                
             else:
-                self.logger.error(f"Dados de volume insuficientes para {symbol}")
+                self.logger.error(f"Dados de volume insuficientes para {symbol}. Chaves disponíveis: {list(volume_data.keys())}")
                 return False
                 
+            # Verificação do critério
             result = volume_increase >= threshold
-            self.logger.info(f"{symbol} - Aumento de volume: {volume_increase:.2%} (limite: {threshold:.2%})")
+            
+            # Log com mais detalhes para análise
+            elapsed = (datetime.now() - start_time).total_seconds() * 1000  # em ms
+            if result:
+                self.logger.info(f"{symbol} - ✅ Aumento significativo de volume detectado: {volume_increase:.2%} (limite: {threshold:.2%}) em {elapsed:.1f}ms")
+            else:
+                self.logger.info(f"{symbol} - ❌ Aumento de volume insuficiente: {volume_increase:.2%} (limite: {threshold:.2%}) em {elapsed:.1f}ms")
+                
             return result
+            
+        except ZeroDivisionError:
+            self.logger.error(f"Erro de divisão por zero ao calcular aumento de volume para {symbol}")
+            return False
+        except TypeError as e:
+            self.logger.error(f"Erro de tipo ao processar dados de volume para {symbol}: {str(e)}")
+            return False
+        except KeyError as e:
+            self.logger.error(f"Chave não encontrada nos dados de volume para {symbol}: {str(e)}")
+            return False
         except Exception as e:
-            self.logger.error(f"Erro ao verificar aumento de volume para {symbol}: {str(e)}")
+            self.logger.error(f"Erro não esperado ao verificar aumento de volume para {symbol}: {str(e)}")
             return False
     
-    def analyze_volume(self, symbol, period="1d", lookback=10):
+    def analyze_volume(self, symbol, period="1d", lookback=10, notifier=None):
         """Analisa volume de negociação para identificar aumento 
         
         Procura por moedas com aumento de volume >30% em relação à média,
         indicando possível movimento de preço significativo
+        
+        Args:
+            symbol (str): O par de moedas para análise
+            period (str): Período das velas (ex: "1d", "4h")
+            lookback (int): Número de períodos para calcular a média
+            notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
         """
         try:
+            # Formata o símbolo corretamente para a API
+            api_symbol = symbol.replace('/', '')  # Remove a barra (ex: "BTC/USDT" -> "BTCUSDT")
+            
             # Obtém dados de velas do período especificado
-            klines = self.binance.get_klines(symbol, period, lookback + 1)
+            klines = self.binance.get_klines(api_symbol, period, lookback + 1)
             
             # Extrai volumes
             volumes = [float(k[5]) for k in klines]
@@ -420,8 +496,16 @@ class SwingTradingStrategy(TradingStrategy):
             volume_increase = (current_volume - avg_volume) / avg_volume
             
             # Log para debug
-            self.logger.info(f"{symbol} - Volume: aumento de {volume_increase:.2%} | " 
-                             f"Atual: {current_volume:.2f} | Média: {avg_volume:.2f}")
+            analysis_message = f"{symbol} - Volume: aumento de {volume_increase:.2%} | " \
+                             f"Atual: {current_volume:.2f} | Média: {avg_volume:.2f}"
+            self.logger.info(analysis_message)
+            
+            # Envia notificação se o notificador for fornecido
+            if notifier:
+                details = f"Aumento de volume: {volume_increase:.2%}\n" \
+                         f"Volume atual: {current_volume:.2f}\n" \
+                         f"Volume médio: {avg_volume:.2f} (últimos {lookback} períodos)"
+                notifier.notify_analysis(symbol, "Volume", details)
             
             return {
                 'avg_volume': avg_volume,
@@ -445,18 +529,27 @@ class SwingTradingStrategy(TradingStrategy):
             self.logger.error(f"Erro ao verificar nova listagem: {str(e)}")
             return False
     
-    def get_volume_data(self, symbol):
-        """Obtém dados de volume para o par especificado"""
+    def get_volume_data(self, symbol, notifier=None):
+        """Obtém dados de volume para o par especificado
+        
+        Args:
+            symbol (str): O par de moedas para análise
+            notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
+        """
         # Este método é abstraído para facilitar os testes com mock
-        return self.analyze_volume(symbol)
+        return self.analyze_volume(symbol, notifier=notifier)
     
-    def analyze_market(self, symbol):
+    def analyze_market(self, symbol, notifier=None):
         """Analisa o mercado usando estratégia de swing trading
         
         Critérios de entrada:
         - Volume >30% acima da média diária
         - Preço abaixo de R$1.00
         - Nova listagem (opcional)
+        
+        Args:
+            symbol (str): O par de moedas para análise
+            notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
         """
         # Verifica limite diário de trades
         if not self.check_trade_limit():
@@ -468,9 +561,13 @@ class SwingTradingStrategy(TradingStrategy):
             self.logger.warning(f"Pausando operações após {self.consecutive_losses} prejuízos consecutivos")
             return False, None, None
         
+        # Formata o símbolo corretamente para a API
+        api_symbol = symbol.replace('/', '')  # Remove a barra (ex: "BTC/USDT" -> "BTCUSDT")
+        
         # Obtém preço atual
-        current_price_data = self.binance.get_ticker_price(symbol)
+        current_price_data = self.binance.get_ticker_price(api_symbol)
         if not current_price_data:
+            self.logger.warning(f"Não foi possível obter preço para {symbol} (API: {api_symbol})")
             return False, None, None
             
         current_price = float(current_price_data['price'])
@@ -510,7 +607,7 @@ class SwingTradingStrategy(TradingStrategy):
                 return False, None, None
             
             # Analisa volume para possível entrada
-            volume_data = self.analyze_volume(symbol)
+            volume_data = self.analyze_volume(symbol, notifier=notifier)
             if not volume_data:
                 return False, None, None
                 
@@ -586,9 +683,12 @@ class SwingTradingStrategy(TradingStrategy):
             self.logger.info(f"Valor: R${entry_value:.2f} | Capital: R${capital:.2f}")
             self.logger.info(f"Alvo: +{self.config.swing_trading['profit_target']*100:.1f}% | Stop: -{self.config.swing_trading['stop_loss']*100:.1f}% | Máx: {self.config.swing_trading['max_hold_time']}h")
             
+            # Formata o símbolo para a API
+            api_symbol = symbol.replace('/', '')
+            
             # Coloca ordem MARKET para entrada rápida (swing trading menos sensível a preço de entrada)
             order = self.binance.create_order(
-                symbol=symbol,
+                symbol=api_symbol,
                 side="BUY",
                 type="MARKET",
                 quantity=quantity
@@ -646,9 +746,12 @@ class SwingTradingStrategy(TradingStrategy):
             # Executa ordem de venda
             self.logger.info(f"[SWING] Vendendo {quantity:.8f} de {symbol} a {price:.8f}")
             
+            # Formata o símbolo para a API
+            api_symbol = symbol.replace('/', '')
+            
             # Coloca ordem MARKET para saída rápida
             order = self.binance.create_order(
-                symbol=symbol,
+                symbol=api_symbol,
                 side="SELL",
                 type="MARKET",
                 quantity=quantity
