@@ -363,6 +363,40 @@ class SwingTradingStrategy(TradingStrategy):
         except Exception as e:
             self.logger.error(f"Erro ao atualizar lista de altcoins: {str(e)}")
     
+    def check_volume_increase(self, symbol, threshold=0.30):
+        """Verifica se o volume da moeda aumentou acima do threshold (30% por padrão)
+        
+        Args:
+            symbol (str): Par de trading para verificar
+            threshold (float): Percentual mínimo de aumento (0.30 = 30%)
+        
+        Returns:
+            bool: True se o volume aumentou mais que o threshold, False caso contrário
+        """
+        try:
+            volume_data = self.get_volume_data(symbol)
+            if not volume_data:
+                return False
+                
+            # Se temos os dados de volume já calculados, usamos
+            if 'volume_increase' in volume_data:
+                volume_increase = volume_data['volume_increase']
+            # Se não, calculamos a partir da média e volume atual
+            elif 'avg_volume' in volume_data and 'current_volume' in volume_data:
+                avg_volume = volume_data['avg_volume']
+                current_volume = volume_data['current_volume']
+                volume_increase = (current_volume - avg_volume) / avg_volume
+            else:
+                self.logger.error(f"Dados de volume insuficientes para {symbol}")
+                return False
+                
+            result = volume_increase >= threshold
+            self.logger.info(f"{symbol} - Aumento de volume: {volume_increase:.2%} (limite: {threshold:.2%})")
+            return result
+        except Exception as e:
+            self.logger.error(f"Erro ao verificar aumento de volume para {symbol}: {str(e)}")
+            return False
+    
     def analyze_volume(self, symbol, period="1d", lookback=10):
         """Analisa volume de negociação para identificar aumento 
         
