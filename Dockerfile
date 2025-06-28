@@ -6,16 +6,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
-    curl \
-    ca-certificates \
-    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia os arquivos de requisitos primeiro (para melhor uso do cache do Docker)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 # Garante que o python-dotenv está instalado
-RUN pip install --no-cache-dir python-dotenv requests[socks] pysocks
+RUN pip install --no-cache-dir python-dotenv
 
 # Copia o restante dos arquivos do projeto
 COPY . .
@@ -27,10 +24,6 @@ RUN mkdir -p /app/data
 # Define variáveis de ambiente
 ENV PYTHONUNBUFFERED=1
 ENV TZ=America/Sao_Paulo
-# Para o suporte a proxy
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
-ENV NO_PROXY="localhost,127.0.0.1"
 
 # Define o comando de entrada
 ENTRYPOINT ["python", "main.py"]
