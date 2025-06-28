@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  robot-crypt:
+    build: .
+    container_name: robot-crypt
+    volumes:
+      - ./.env:/app/.env
+      - ./logs:/root/.robot-crypt/logs
+    restart: unless-stopped
+    environment:
+      - TZ=America/Sao_Paulo
+    
+  # Serviço opcional para visualização de logs
+  # Descomente para usar
+  # logs-viewer:
+  #   image: amir20/dozzle:latest
+  #   container_name: robot-crypt-logs
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   ports:
+  #     - "9999:8080"
+  #   depends_on:
+  #     - robot-crypt

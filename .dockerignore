@@ -1,0 +1,38 @@
+# Arquivos e diretórios a serem ignorados pelo Docker
+
+# Ambiente virtual
+venv/
+virtualenv/
+env/
+.env.backup
+
+# Arquivos Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+logs/
+
+# Arquivos do sistema
+.DS_Store
+.idea/
+.vscode/
+
+# Arquivos sensíveis 
+# (o arquivo .env será mapeado como volume no docker-compose.yml)
+.env
+
+# Arquivos git
+.git/
+.gitignore
+
+# Arquivos Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
