@@ -6,7 +6,8 @@ services:
     container_name: robot-crypt
     volumes:
       - ./.env:/app/.env
-      - ./logs:/root/.robot-crypt/logs
+      - ./logs:/app/logs
+      - ./data:/app/data
     restart: unless-stopped
     environment:
       - TZ=America/Sao_Paulo

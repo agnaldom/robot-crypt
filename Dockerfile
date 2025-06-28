@@ -11,15 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia os arquivos de requisitos primeiro (para melhor uso do cache do Docker)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# Garante que o python-dotenv está instalado
+RUN pip install --no-cache-dir python-dotenv
 
 # Copia o restante dos arquivos do projeto
 COPY . .
 
-# Cria a estrutura de diretórios para logs
-RUN mkdir -p /root/.robot-crypt/logs
+# Cria a estrutura de diretórios para logs e dados
+RUN mkdir -p /app/logs
+RUN mkdir -p /app/data
 
 # Define variáveis de ambiente
 ENV PYTHONUNBUFFERED=1
+ENV TZ=America/Sao_Paulo
 
 # Define o comando de entrada
 ENTRYPOINT ["python", "main.py"]
