@@ -91,15 +91,15 @@ def initialize_resources():
                 
         # Inicializa API da Binance
         binance = BinanceAPI(
-            api_key=config.binance_api_key,
-            api_secret=config.binance_api_secret,
+            api_key=config.api_key,
+            api_secret=config.api_secret,
             testnet=config.use_testnet
         )
         
         # Testa conexão
         logger.info("Testando conexão com a API da Binance...")
-        ping_status = binance.ping()
-        if ping_status:
+        connection_status = binance.test_connection()
+        if connection_status:
             logger.info("Conexão com a Binance estabelecida com sucesso")
         else:
             logger.error("Falha ao conectar à API da Binance. Encerrando.")
