@@ -671,3 +671,37 @@ class BinanceSimulator:
         }
         
         self.logger.info("Simulador fechado e saldo restaurado")
+
+def filtrar_pares_por_liquidez(pares, volume_minimo, binance_api):
+    """Filtra pares de trading com base no volume mínimo de negociação
+    
+    Args:
+        pares (list): Lista de pares de trading no formato "BTC/USDT"
+        volume_minimo (float): Volume mínimo de negociação em USD nas últimas 24 horas
+        binance_api: Instância da API da Binance para consultar volumes
+        
+    Returns:
+        list: Lista de pares filtrados que atendem ao critério de volume mínimo
+    """
+    pares_filtrados = []
+    
+    for par in pares:
+        try:
+            # Obter ticker de 24h para o par
+            api_symbol = par.replace('/', '')
+            ticker_24h = binance_api.get_ticker_24h(api_symbol)
+            
+            # Verificar se o volume atende ao mínimo
+            volume_24h_usd = float(ticker_24h['quoteVolume'])  # Volume em moeda quote (geralmente USDT)
+            
+            if volume_24h_usd >= volume_minimo:
+                pares_filtrados.append(par)
+            else:
+                logger = logging.getLogger("robot-crypt")
+                logger.info(f"Par {par} descartado por volume insuficiente: ${volume_24h_usd:.2f} (mínimo: ${volume_minimo:.2f})")
+                
+        except Exception as e:
+            logger = logging.getLogger("robot-crypt")
+            logger.warning(f"Erro ao verificar volume de {par}: {str(e)}")
+    
+    return pares_filtrados
