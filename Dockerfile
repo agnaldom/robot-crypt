@@ -31,5 +31,12 @@ ENV PYTHONUNBUFFERED=1
 ENV TZ=America/Sao_Paulo
 ENV PYTHONIOENCODING=utf-8
 
+# Torna o script de healthcheck executável
+RUN chmod +x /app/healthcheck.sh
+
+# Configuração de healthcheck
+HEALTHCHECK --interval=1m --timeout=5s --start-period=30s --retries=3 \
+  CMD /app/healthcheck.sh
+
 # Define o comando de entrada
 ENTRYPOINT ["/app/railway_entrypoint.sh"]
