@@ -705,3 +705,45 @@ def filtrar_pares_por_liquidez(pares, volume_minimo, binance_api):
             logger.warning(f"Erro ao verificar volume de {par}: {str(e)}")
     
     return pares_filtrados
+
+def retry_operation(operation, max_retries=3, initial_wait=1, max_wait=60, logger=None):
+    """
+    Executa uma operação com mecanismo de retry com backoff exponencial
+    
+    Args:
+        operation (callable): Função a ser executada
+        max_retries (int): Número máximo de tentativas
+        initial_wait (int): Tempo de espera inicial em segundos
+        max_wait (int): Tempo máximo de espera em segundos
+        logger (logging.Logger): Logger para registrar mensagens
+    
+    Returns:
+        O resultado da operação se bem sucedido, None caso contrário
+    """
+    import time
+    import random
+    from requests.exceptions import RequestException, Timeout, ConnectionError
+    
+    for attempt in range(max_retries):
+        try:
+            return operation()
+        except (RequestException, Timeout, ConnectionError) as e:
+            # Calcula tempo de espera com jitter para evitar thundering herd
+            wait_time = min(max_wait, initial_wait * (2 ** attempt) + random.uniform(0, 1))
+            
+            if logger:
+                error_type = e.__class__.__name__
+                logger.warning(f"Tentativa {attempt + 1}/{max_retries} falhou com erro {error_type}: {str(e)}")
+                logger.warning(f"Aguardando {wait_time:.2f}s antes da próxima tentativa")
+                
+            if attempt < max_retries - 1:
+                time.sleep(wait_time)
+            else:
+                if logger:
+                    logger.error(f"Operação falhou após {max_retries} tentativas")
+                return None
+        except Exception as e:
+            # Para outros tipos de erro, não tentamos novamente
+            if logger:
+                logger.error(f"Erro não recuperável: {str(e)}")
+            raise

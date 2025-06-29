@@ -407,8 +407,8 @@ def main():
     # Loop principal
     try:
         while True:
+            # Bloco para relatório de performance
             try:
-                # Bloco para relatório de performance
                 # Reporta estatísticas a cada 24h
                 runtime = (datetime.now() - stats['start_time']).total_seconds() / 3600
                 if runtime >= 24 and runtime % 24 < 0.1:  # Aproximadamente a cada 24h
@@ -442,25 +442,25 @@ def main():
                 logger.exception("Detalhes do erro:")
             
             # Início do bloco principal de execução
-            # Sem bloco try aqui para evitar problemas com exceções não tratadas
-            if not pairs:
-                logger.warning("Nenhum par de trading disponível para análise!")
-                
-                # Tenta definir alguns pares padrão se não houver nenhum
-                if config.use_testnet:
-                    pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
-                    logger.info("Definindo pares padrão para testnet: " + ", ".join(pairs))
-                else:
-                    pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"]
-                    logger.info("Definindo pares padrão para produção: " + ", ".join(pairs))
-                
-                # Notifica via Telegram
-                if notifier:
-                    notifier.notify_status(f"⚠️ Nenhum par de trading encontrado. Definidos pares padrão: {', '.join(pairs)}")
+            try:
+                if not pairs:
+                    logger.warning("Nenhum par de trading disponível para análise!")
+                    
+                    # Tenta definir alguns pares padrão se não houver nenhum
+                    if config.use_testnet:
+                        pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
+                        logger.info("Definindo pares padrão para testnet: " + ", ".join(pairs))
+                    else:
+                        pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"]
+                        logger.info("Definindo pares padrão para produção: " + ", ".join(pairs))
+                    
+                    # Notifica via Telegram
+                    if notifier:
+                        notifier.notify_status(f"⚠️ Nenhum par de trading encontrado. Definidos pares padrão: {', '.join(pairs)}")
             
-            # Verifica se a estratégia foi inicializada
-            if strategy is None:
-                logger.warning("Estratégia não inicializada! Inicializando com base no capital...")
+                # Verifica se a estratégia foi inicializada
+                if strategy is None:
+                    logger.warning("Estratégia não inicializada! Inicializando com base no capital...")
                 
                 # Inicializa a estratégia com base no capital
                 if capital < 300:
@@ -692,112 +692,111 @@ def main():
                             pairs.extend(["BNB/BTC", "BNB/ETH"])
                             if brl_balance > 0:
                                 pairs.append("BNB/BRL")
-                
-                # Incrementa contador de salvamento de estado
-                state_save_counter += 1
+            
+            # Incrementa contador de salvamento de estado
+            state_save_counter += 1
             
             # Salva o estado a cada ciclo
             if state_save_counter >= 1:
-                try:
-                    # Prepara o estado para ser salvo
-                    state_to_save = {
-                        'stats': {
-                            # Verifica se todas as chaves necessárias existem antes de salvar
-                            'total_trades': stats.get('total_trades', 0),
-                            'winning_trades': stats.get('winning_trades', 0),
-                            'losing_trades': stats.get('losing_trades', 0),
-                            'initial_capital': stats.get('initial_capital', config.get_balance(account_info)),
-                            'current_capital': stats.get('current_capital', config.get_balance(account_info)),
-                            'best_trade_profit': stats.get('best_trade_profit', 0),
-                            'worst_trade_loss': stats.get('worst_trade_loss', 0),
-                            'start_time': stats.get('start_time', datetime.now()).isoformat() if isinstance(stats.get('start_time', datetime.now()), datetime) else stats.get('start_time', datetime.now().isoformat()),
-                            'profit_history': stats.get('profit_history', [])
-                        },
-                        'last_check_time': datetime.now().isoformat(),
-                        'strategy_type': strategy.__class__.__name__,
-                        'pairs': pairs
-                    }
-                    
-                    # Adiciona posições abertas se disponíveis
-                    if hasattr(strategy, 'open_positions'):
-                        # Conversão de posições abertas para formato serializável
-                        open_positions_serialized = {}
-                        for key, position in strategy.open_positions.items():
-                            # Se a posição tiver um campo 'time', converta de datetime para string
-                            pos_copy = position.copy()
-                            if 'time' in pos_copy and isinstance(pos_copy['time'], datetime):
-                                pos_copy['time'] = pos_copy['time'].isoformat()
-                            open_positions_serialized[key] = pos_copy
-                        
-                        state_to_save['open_positions'] = open_positions_serialized
-                    
-                    # Salva o estado no arquivo JSON (legado) e no banco de dados
-                    save_state(state_to_save)
-                    db.save_app_state(state_to_save)
-                    
-                    # Atualiza estatísticas diárias no banco de dados
-                    db.update_daily_stats(stats)
+                # Prepara o estado para ser salvo
+                state_to_save = {
+                    'stats': {
+                        # Verifica se todas as chaves necessárias existem antes de salvar
+                        'total_trades': stats.get('total_trades', 0),
+                        'winning_trades': stats.get('winning_trades', 0),
+                        'losing_trades': stats.get('losing_trades', 0),
+                        'initial_capital': stats.get('initial_capital', config.get_balance(account_info)),
+                        'current_capital': stats.get('current_capital', config.get_balance(account_info)),
+                        'best_trade_profit': stats.get('best_trade_profit', 0),
+                        'worst_trade_loss': stats.get('worst_trade_loss', 0),
+                        'start_time': stats.get('start_time', datetime.now()).isoformat() if isinstance(stats.get('start_time', datetime.now()), datetime) else stats.get('start_time', datetime.now().isoformat()),
+                        'profit_history': stats.get('profit_history', [])
+                    },
+                    'last_check_time': datetime.now().isoformat(),
+                    'strategy_type': strategy.__class__.__name__,
+                    'pairs': pairs
+                }
                 
-                    # Resetamos contador de erros consecutivos quando completamos um ciclo com sucesso
-                    consecutive_errors = 0
+                # Adiciona posições abertas se disponíveis
+                if hasattr(strategy, 'open_positions'):
+                    # Conversão de posições abertas para formato serializável
+                    open_positions_serialized = {}
+                    for key, position in strategy.open_positions.items():
+                        # Se a posição tiver um campo 'time', converta de datetime para string
+                        pos_copy = position.copy()
+                        if 'time' in pos_copy and isinstance(pos_copy['time'], datetime):
+                            pos_copy['time'] = pos_copy['time'].isoformat()
+                        open_positions_serialized[key] = pos_copy
                     
-                    # Espera o intervalo configurado antes da próxima verificação
-                    logger.info(f"Aguardando {config.check_interval} segundos até próxima verificação")
-                    time.sleep(config.check_interval)
+                    state_to_save['open_positions'] = open_positions_serialized
                 
-                except requests.exceptions.RequestException as e:
-                    consecutive_errors += 1
-                    logger.error(f"Erro de conexão [{consecutive_errors}/{max_consecutive_errors}]: {str(e)}")
+                # Salva o estado no arquivo JSON (legado) e no banco de dados
+                save_state(state_to_save)
+                db.save_app_state(state_to_save)
+                
+                # Atualiza estatísticas diárias no banco de dados
+                db.update_daily_stats(stats)
+            
+                # Resetamos contador de erros consecutivos quando completamos um ciclo com sucesso
+                consecutive_errors = 0
+                
+                # Espera o intervalo configurado antes da próxima verificação
+                logger.info(f"Aguardando {config.check_interval} segundos até próxima verificação")
+                time.sleep(config.check_interval)
+                
+            except requests.exceptions.RequestException as e:
+                consecutive_errors += 1
+                logger.error(f"Erro de conexão [{consecutive_errors}/{max_consecutive_errors}]: {str(e)}")
+                
+                # Determina tempo de espera baseado na quantidade de erros consecutivos
+                wait_time = min(60, 5 * (2 ** (consecutive_errors - 1)))  # 5, 10, 20, 40, 60 segundos
+                
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(f"Muitos erros consecutivos ({consecutive_errors}). Aplicando pausa longa.")
+                    wait_time = 300  # 5 minutos de pausa após muitos erros
+                
+                if hasattr(e, 'response') and e.response:
+                    status_code = e.response.status_code
+                    if status_code == 429:  # Rate limit
+                        logger.error("Erro 429: Rate limit atingido. Pausa longa necessária.")
+                        wait_time = max(wait_time, 120)  # Pelo menos 2 minutos para rate limit
+                
+                logger.warning(f"Aguardando {wait_time} segundos antes de tentar novamente...")
+                time.sleep(wait_time)
+                logger.info("Retomando operações após pausa por erro")
+                
+            except Exception as e:
+                consecutive_errors += 1
+                logger.error(f"Erro inesperado no loop principal [{consecutive_errors}/{max_consecutive_errors}]: {str(e)}")
+                logger.exception("Detalhes do erro:")
+                
+                # Notifica via Telegram, mas continua a execução
+                if notifier:
+                    try:
+                        notifier.notify_error(f"Erro recuperável: {str(e)[:100]}")
+                    except:
+                        pass
+                
+                # Pausa para recuperação
+                wait_time = min(120, 10 * consecutive_errors)
+                logger.warning(f"Aguardando {wait_time} segundos para recuperação...")
+                time.sleep(wait_time)
+                
+                # Se tivermos muitos erros consecutivos, pode ser um problema mais sério
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.error(f"Limite de erros consecutivos atingido ({max_consecutive_errors}). "
+                                f"Reiniciando recursos para tentar recuperar.")
                     
-                    # Determina tempo de espera baseado na quantidade de erros consecutivos
-                    wait_time = min(60, 5 * (2 ** (consecutive_errors - 1)))  # 5, 10, 20, 40, 60 segundos
-                    
-                    if consecutive_errors >= max_consecutive_errors:
-                        logger.error(f"Muitos erros consecutivos ({consecutive_errors}). Aplicando pausa longa.")
-                        wait_time = 300  # 5 minutos de pausa após muitos erros
-                    
-                    if hasattr(e, 'response') and e.response:
-                        status_code = e.response.status_code
-                        if status_code == 429:  # Rate limit
-                            logger.error("Erro 429: Rate limit atingido. Pausa longa necessária.")
-                            wait_time = max(wait_time, 120)  # Pelo menos 2 minutos para rate limit
-                    
-                    logger.warning(f"Aguardando {wait_time} segundos antes de tentar novamente...")
-                    time.sleep(wait_time)
-                    logger.info("Retomando operações após pausa por erro")
-                    
-                except Exception as e:
-                    consecutive_errors += 1
-                    logger.error(f"Erro inesperado no loop principal [{consecutive_errors}/{max_consecutive_errors}]: {str(e)}")
-                    logger.exception("Detalhes do erro:")
-                    
-                    # Notifica via Telegram, mas continua a execução
-                    if notifier:
-                        try:
-                            notifier.notify_error(f"Erro recuperável: {str(e)[:100]}")
-                        except:
-                            pass
-                    
-                    # Pausa para recuperação
-                    wait_time = min(120, 10 * consecutive_errors)
-                    logger.warning(f"Aguardando {wait_time} segundos para recuperação...")
-                    time.sleep(wait_time)
-                    
-                    # Se tivermos muitos erros consecutivos, pode ser um problema mais sério
-                    if consecutive_errors >= max_consecutive_errors:
-                        logger.error(f"Limite de erros consecutivos atingido ({max_consecutive_errors}). "
-                                    f"Reiniciando recursos para tentar recuperar.")
+                    # Tenta reiniciar recursos críticos
+                    try:
+                        logger.info("Tentando reinicializar conexão com a Binance...")
+                        if not config.simulation_mode:
+                            binance = BinanceAPI(config.api_key, config.api_secret, testnet=config.use_testnet)
                         
-                        # Tenta reiniciar recursos críticos
-                        try:
-                            logger.info("Tentando reinicializar conexão com a Binance...")
-                            if not config.simulation_mode:
-                                binance = BinanceAPI(config.api_key, config.api_secret, testnet=config.use_testnet)
-                            
-                            # Reseta contador após reinicialização
-                            consecutive_errors = 0
-                        except Exception as reinit_error:
-                            logger.error(f"Erro ao reinicializar recursos: {str(reinit_error)}")
+                        # Reseta contador após reinicialização
+                        consecutive_errors = 0
+                    except Exception as reinit_error:
+                        logger.error(f"Erro ao reinicializar recursos: {str(reinit_error)}")
                 
     except KeyboardInterrupt:
         logger.info("Bot interrompido pelo usuário")
