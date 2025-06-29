@@ -27,6 +27,10 @@ class Config:
         simulation_mode = os.environ.get("SIMULATION_MODE", "false").lower()
         self.simulation_mode = simulation_mode in ["true", "1", "yes", "y", "sim", "s"]
         
+        # Controle de perdas consecutivas
+        self.max_consecutive_losses = int(os.environ.get("MAX_CONSECUTIVE_LOSSES", "3"))
+        self.risk_reduction_factor = float(os.environ.get("RISK_REDUCTION_FACTOR", "0.5"))
+        
         # Verifica se existem chaves específicas para testnet
         if self.use_testnet:
             testnet_key = os.environ.get("TESTNET_API_KEY")

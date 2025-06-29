@@ -17,6 +17,7 @@ class TradingStrategy:
         self.logger = logging.getLogger("robot-crypt")
         self.trades_today = 0
         self.last_trade_reset = datetime.now().date()
+        self.consecutive_losses = 0  # Contador de perdas consecutivas
     
     def check_trade_limit(self):
         """Verifica se o limite diário de trades foi atingido"""
@@ -36,7 +37,13 @@ class TradingStrategy:
     
     def calculate_position_size(self, capital, price, risk_percentage):
         """Calcula o tamanho da posição baseado no capital e risco"""
-        max_risk = capital * risk_percentage
+        # Aplica redução de risco após perdas consecutivas
+        adjusted_risk = risk_percentage
+        if self.consecutive_losses >= self.config.max_consecutive_losses:
+            adjusted_risk = risk_percentage * self.config.risk_reduction_factor
+            self.logger.warning(f"Reduzindo risco para {adjusted_risk*100:.2f}% após {self.consecutive_losses} perdas consecutivas")
+        
+        max_risk = capital * adjusted_risk
         
         # Também aplicar limitação de posição máxima
         max_position = capital * self.config.scalping["max_position_size"]
@@ -71,7 +78,6 @@ class ScalpingStrategy(TradingStrategy):
         """Inicializa a estratégia de scalping"""
         super().__init__(config, binance_api)
         self.open_positions = {}  # Rastreia posições abertas
-        self.consecutive_losses = 0  # Rastreia perdas consecutivas
     
     def identify_support_resistance(self, symbol, period="1h", lookback=24):
         """Identifica níveis de suporte e resistência
@@ -359,7 +365,6 @@ class SwingTradingStrategy(TradingStrategy):
         """Inicializa a estratégia de swing trading"""
         super().__init__(config, binance_api)
         self.open_positions = {}  # Rastreia posições abertas
-        self.consecutive_losses = 0  # Rastreia perdas consecutivas
         
         # Lista de moedas monitoradas para a estratégia
         self.altcoins_under_1_brl = []

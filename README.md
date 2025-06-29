@@ -3,7 +3,7 @@
 Bot de negociação para crescimento na Binance a partir de R$100, com foco em baixo risco e progressão sustentável.
 
 ![Robot-Crypt Logo](https://img.shields.io/badge/Robot--Crypt-Trading%20Bot-blue)
-![Version](https://img.shields.io/badge/versão-2.0.0-green)
+![Version](https://img.shields.io/badge/versão-3.0.0-green)
 ![Tests](https://img.shields.io/badge/testes-passing-success)
 
 ## Visão Geral
@@ -15,6 +15,12 @@ Ele implementa uma estratégia progressiva que evolui de acordo com o cresciment
 - Evolui para swing trading à medida que o capital cresce
 - Implementa rígido controle de risco e gestão de capital
 - Envia alertas e relatórios via Telegram
+- **NOVO:** Proteção contra perdas consecutivas (reduz automaticamente o risco)
+- **NOVO:** Filtragem de pares por liquidez (evita pares com baixo volume)
+- **NOVO:** Persistência de dados em SQLite para análises avançadas
+- **NOVO:** Integração com APIs de eventos de criptomoedas (CoinMarketCal, CryptoPanic)
+- **NOVO:** Relatórios gráficos e visualização de desempenho (Matplotlib)
+- **NOVO:** Testes unitários automatizados (PyTest)
 
 ## Plano Estratégico
 
@@ -260,8 +266,6 @@ Semana 5 (Capital: R$520):
 Este bot é fornecido apenas para fins educacionais e de pesquisa. Opere por sua conta e risco. Os desenvolvedores não são responsáveis por perdas financeiras resultantes do uso deste software.
 
 "O segredo para investir em cripto não está em tentar ficar rico rapidamente, mas em construir consistentemente ao longo do tempo com disciplina e gestão de risco." - Adaptado de disciplinas tradicionais de investimento
-```
-```
 
 ### Notificações via Telegram
 
@@ -335,8 +339,7 @@ Se você receber erros de autenticação:
 
 1. Verifique se suas credenciais estão corretas no arquivo `.env`
 2. Se estiver usando testnet, garanta que está usando as credenciais específicas da testnet
-3. Para testnet, você pode gerar novas credenciais em https://testnet.binance.vision/
-
+3. Para testnet, você pode gerar novas credenciais em
 ### Problemas com Simulação
 
 Se a simulação não estiver funcionando corretamente:

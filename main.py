@@ -7,12 +7,13 @@ import time
 import logging
 import json
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from binance_api import BinanceAPI
 from strategy import ScalpingStrategy, SwingTradingStrategy
 from config import Config
-from utils import setup_logger, save_state, load_state
+from utils import setup_logger, save_state, load_state, filtrar_pares_por_liquidez
 from telegram_notifier import TelegramNotifier
+from db_manager import DBManager
 
 # Configuração de logging
 logger = setup_logger()
@@ -28,6 +29,10 @@ def main():
     logger.info(f"Telegram Token disponível: {'Sim' if config.telegram_bot_token else 'Não'}")
     logger.info(f"Telegram Chat ID disponível: {'Sim' if config.telegram_chat_id else 'Não'}")
     logger.info(f"Notificações Telegram habilitadas: {'Sim' if config.notifications_enabled else 'Não'}")
+    
+    # Inicializa banco de dados SQLite
+    db = DBManager()
+    logger.info("Banco de dados SQLite inicializado com sucesso")
     
     # Inicializa notificador Telegram, se configurado
     notifier = None
@@ -107,127 +112,36 @@ def main():
     if notifier:
         notifier.notify_status(f"Saldo atual: R${capital:.2f}")
     
-    # Define estratégia baseada no capital atual
+    # Inicializa estratégia conforme o saldo disponível
+    strategy = None
+    pairs = []
+    state_save_counter = 0
+    start_time = datetime.now()
     
-    # Verifica se tem BNB e USDT no saldo (com detecção melhorada)
-    bnb_balance = 0
-    usdt_balance = 0
-    brl_balance = 0
-    
-    for balance in account_info.get('balances', []):
-        asset = balance['asset']
-        free_amount = float(balance['free'])
-        locked_amount = float(balance['locked'])
-        total_amount = free_amount + locked_amount
-        
-        if asset == 'BNB' and total_amount > 0:
-            bnb_balance = total_amount
-            logger.info(f"Saldo de BNB detectado: {bnb_balance:.8f} BNB")
-        elif asset == 'USDT' and total_amount > 0:
-            usdt_balance = total_amount
-            logger.info(f"Saldo de USDT detectado: {usdt_balance:.2f} USDT")
-        elif asset == 'BRL' and total_amount > 0:
-            brl_balance = total_amount
-            logger.info(f"Saldo de BRL detectado: {brl_balance:.2f} BRL")
-    
-    # Carrega pares de negociação da configuração, se disponível
-    config_pairs = config.trading_pairs if hasattr(config, 'trading_pairs') and config.trading_pairs else []
-    
-    # Determina a estratégia e pares baseados no capital e saldos disponíveis
-    if capital < 300:
-        # Fase 2: Scalping de Baixo Risco
-        logger.info("Utilizando estratégia de Scalping de Baixo Risco (Fase 2)")
-        strategy = ScalpingStrategy(config, binance)
-        
-        # Define os pares iniciais baseados nos saldos disponíveis
-        pairs = []
-        
-        # Se temos configuração explícita de pares, usamos ela
-        if config_pairs:
-            logger.info(f"Usando pares configurados: {config_pairs}")
-            pairs = config_pairs
-        # Caso contrário, definimos pares com base nas moedas disponíveis
-        else:
-            if config.use_testnet:
-                pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
-                logger.info("Usando pares compatíveis com testnet para scalping")
-            else:
-                # Adiciona pares com base nas moedas disponíveis
-                if usdt_balance > 0:
-                    pairs.extend(["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"])
-                    logger.info(f"Adicionando pares USDT para negociação com saldo disponível de {usdt_balance:.2f} USDT")
-                    
-                if brl_balance > 0:
-                    pairs.extend(["BTC/BRL", "ETH/BRL"])
-                    logger.info(f"Adicionando pares BRL para negociação com saldo disponível de {brl_balance:.2f} BRL")
-        
-        # Se tiver saldo de BNB, adiciona pares específicos para negociar BNB
-        # Remove a restrição mínima de 0.1 BNB para se adequar ao saldo real do usuário
-        if bnb_balance > 0.01:
-            logger.info(f"Adicionando pares de BNB para negociação com saldo disponível de {bnb_balance:.8f} BNB")
-            if usdt_balance > 0:
-                pairs.append("BNB/USDT")
-                logger.info("Adicionado par BNB/USDT para uso de BNB e USDT")
-                
-            if config.use_testnet:
-                pairs.append("BNB/BTC")
-            else:
-                pairs.extend(["BNB/BTC", "BNB/ETH"])
-                if brl_balance > 0:
-                    pairs.append("BNB/BRL")
-    else:
-        # Fase 3: Swing Trading em Altcoins
-        logger.info("Utilizando estratégia de Swing Trading em Altcoins (Fase 3)")
-        strategy = SwingTradingStrategy(config, binance)
-        
-        # Define os pares baseados nos saldos disponíveis
-        pairs = []
-        
-        # Se temos configuração explícita de pares, usamos ela
-        if config_pairs:
-            logger.info(f"Usando pares configurados: {config_pairs}")
-            pairs = config_pairs
-        # Caso contrário, definimos pares com base nas moedas disponíveis
-        else:
-            if config.use_testnet:
-                pairs = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"]  # Pares comuns na testnet
-                logger.info("Usando pares compatíveis com testnet para swing trading")
-            else:
-                # Adiciona pares com base nas moedas disponíveis
-                if usdt_balance > 0:
-                    pairs.extend(["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT", "FLOKI/USDT"])
-                    logger.info(f"Adicionando pares USDT para negociação com saldo disponível de {usdt_balance:.2f} USDT")
-                    
-                if brl_balance > 0:
-                    pairs.extend(["SHIB/BRL", "FLOKI/BRL", "DOGE/BRL"])
-                    logger.info(f"Adicionando pares BRL para negociação com saldo disponível de {brl_balance:.2f} BRL")
-        
-        # Se tiver saldo de BNB, adiciona pares específicos para negociar BNB
-        # Remove a restrição mínima de 0.1 BNB para se adequar ao saldo real do usuário
-        if bnb_balance > 0.01:
-            logger.info(f"Adicionando pares de BNB para negociação com saldo disponível de {bnb_balance:.8f} BNB")
-            if usdt_balance > 0:
-                pairs.append("BNB/USDT")
-                logger.info("Adicionado par BNB/USDT para uso de BNB e USDT")
-                
-            if config.use_testnet:
-                pairs.extend(["BNB/BTC", "BNB/ETH"])
-            else:
-                pairs.extend(["BNB/BTC", "BNB/ETH"])
-                if brl_balance > 0:
-                    pairs.append("BNB/BRL")
-    
-    # Tenta carregar estatísticas e estado anterior
+    # Carrega o estado anterior da aplicação
     previous_state = load_state()
+    
+    # Se não houver estado em arquivo, tenta carregar do banco de dados
+    if not previous_state:
+        logger.info("Nenhum arquivo de estado encontrado, tentando carregar do banco de dados...")
+        previous_state = db.load_last_app_state()
+    
+    # Inicializa estatísticas
+    stats = {}
+    
     if previous_state and 'stats' in previous_state:
-        # Carrega estatísticas anteriores
+        logger.info("Estado anterior encontrado. Retomando operação...")
         stats = previous_state['stats']
         
-        # Converte o start_time de string ISO para datetime
+        # Converte a string de data de volta para datetime
         if 'start_time' in stats and isinstance(stats['start_time'], str):
             stats['start_time'] = datetime.fromisoformat(stats['start_time'])
-            
-        last_check_time = datetime.fromisoformat(previous_state.get('last_check_time', datetime.now().isoformat()))
+        
+        # Obtém hora da última verificação
+        if 'last_check_time' in previous_state and isinstance(previous_state['last_check_time'], str):
+            last_check_time = datetime.fromisoformat(previous_state['last_check_time'])
+        else:
+            last_check_time = datetime.now() - timedelta(hours=1)
         
         # Verifica se as posições abertas foram salvas
         if 'open_positions' in previous_state and hasattr(strategy, 'open_positions'):
@@ -509,9 +423,12 @@ def main():
                     
                     state_to_save['open_positions'] = open_positions_serialized
                 
-                # Salva o estado
+                # Salva o estado no arquivo JSON (legado) e no banco de dados
                 save_state(state_to_save)
-                state_save_counter = 0  # Reinicia o contador
+                db.save_app_state(state_to_save)
+                
+                # Atualiza estatísticas diárias no banco de dados
+                db.update_daily_stats(stats)
             
             # Espera o intervalo configurado antes da próxima análise
             logger.info(f"Aguardando {config.check_interval} segundos até próxima verificação")
