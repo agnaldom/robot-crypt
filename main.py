@@ -7,6 +7,9 @@ import time
 import logging
 import json
 import requests
+import signal
+import sys
+import os
 from datetime import datetime, timedelta
 from binance_api import BinanceAPI
 from strategy import ScalpingStrategy, SwingTradingStrategy
@@ -19,9 +22,22 @@ from pathlib import Path
 # Configuração de logging
 logger = setup_logger()
 
-def main():
-    """Função principal do bot"""
-    logger.info("Iniciando Robot-Crypt Bot")
+# Variáveis globais para controle de sinal
+SHOULD_EXIT = False
+
+# Função para tratamento de sinais
+def signal_handler(sig, frame):
+    global SHOULD_EXIT
+    logger.info(f"Sinal {sig} recebido, preparando para encerramento gracioso...")
+    SHOULD_EXIT = True
+
+# Registra handlers para sinais
+signal.signal(signal.SIGTERM, signal_handler)
+signal.signal(signal.SIGINT, signal_handler)
+
+def initialize_resources():
+    """Inicializa recursos básicos do sistema"""
+    logger.info("Iniciando inicialização do Robot-Crypt")
     
     # Verifica e cria diretórios necessários
     for directory in ['data', 'logs', 'reports']:
@@ -46,6 +62,77 @@ def main():
     notifier = None
     if config.notifications_enabled:
         notifier = TelegramNotifier(config.telegram_bot_token, config.telegram_chat_id)
+    
+    # Inicializa conexão com Binance
+    if config.simulation_mode:
+        logger.info("MODO DE SIMULAÇÃO ATIVADO - Não será feita conexão real com a Binance")
+        logger.info("Os dados de mercado e operações serão simulados")
+        
+        # Importa e inicializa o simulador 
+        from binance_simulator import BinanceSimulator
+        binance = BinanceSimulator()
+        
+        # Notifica sobre o modo de simulação
+        if notifier:
+            notifier.notify_status("🔄 Robot-Crypt iniciado em MODO DE SIMULAÇÃO!")
+    else:
+        # Inicializa conexão real com a Binance
+        logger.info("Conectando à API da Binance...")
+        
+        if config.use_testnet:
+            logger.info("Usando Binance Testnet (ambiente de testes)")
+            if notifier:
+                notifier.notify_status("🔄 Robot-Crypt iniciado em MODO TESTNET!")
+        else:
+            logger.info("Conectando a Binance em modo de PRODUÇÃO!")
+            logger.info("!!! ATENÇÃO !!! Operações com dinheiro real serão executadas!")
+            if notifier:
+                notifier.notify_status("⚠️ Robot-Crypt iniciado em MODO DE PRODUÇÃO!")
+                
+        # Inicializa API da Binance
+        binance = BinanceAPI(
+            api_key=config.binance_api_key,
+            api_secret=config.binance_api_secret,
+            testnet=config.use_testnet
+        )
+        
+        # Testa conexão
+        logger.info("Testando conexão com a API da Binance...")
+        ping_status = binance.ping()
+        if ping_status:
+            logger.info("Conexão com a Binance estabelecida com sucesso")
+        else:
+            logger.error("Falha ao conectar à API da Binance. Encerrando.")
+            if notifier:
+                notifier.notify_alert("❌ FALHA DE CONEXÃO com a Binance. Robot-Crypt não iniciado!")
+            return None, None, None
+
+    logger.info("Inicialização concluída com sucesso")
+    
+    # Pausa para garantir que o container esteja estável
+    logger.info("Aguardando 10 segundos antes de iniciar operações...")
+    for i in range(10, 0, -1):
+        if SHOULD_EXIT:
+            logger.info("Encerramento solicitado durante a inicialização")
+            return None, None, None
+        logger.info(f"Iniciando operações em {i} segundos...")
+        time.sleep(1)
+    
+    return config, binance, notifier, db
+
+def main():
+    """Função principal do bot"""
+    logger.info("Iniciando Robot-Crypt Bot")
+    
+    # Fase de inicialização - estabelece conexões e prepara recursos
+    config, binance, notifier, db = initialize_resources()
+    
+    # Verifica se a inicialização foi bem-sucedida
+    if not config or not binance:
+        logger.error("Falha na inicialização dos recursos necessários. Encerrando.")
+        return
+        
+    # A partir daqui, é o código original do main.py
     
     # Verifica se estamos em modo de simulação
     if config.simulation_mode:
