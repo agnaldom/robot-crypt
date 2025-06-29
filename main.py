@@ -99,26 +99,38 @@ def main():
         return
     
     # Verifica saldo da conta
-    account_info = binance.get_account_info()
-    
-    # Log detalhado das informações da conta para depuração
-    logger.info("Informações detalhadas da conta Binance:")
-    if 'balances' in account_info:
-        for balance in account_info['balances']:
-            asset = balance.get('asset', '')
-            free = float(balance.get('free', '0'))
-            locked = float(balance.get('locked', '0'))
-            total = free + locked
-            if total > 0:
-                logger.info(f"Moeda: {asset}, Livre: {free}, Bloqueado: {locked}, Total: {total}")
-    
-    # Obtém o saldo total da conta em BRL/USDT
-    capital = config.get_balance(account_info)
-    logger.info(f"Saldo total convertido: R${capital:.2f}")
-    
-    # Notifica saldo via Telegram
-    if notifier:
-        notifier.notify_status(f"Saldo atual: R${capital:.2f}")
+    try:
+        account_info = binance.get_account_info()
+        
+        # Log detalhado das informações da conta para depuração
+        logger.info("Informações detalhadas da conta Binance:")
+        if 'balances' in account_info:
+            for balance in account_info['balances']:
+                try:
+                    asset = balance.get('asset', '')
+                    free = float(balance.get('free', '0'))
+                    locked = float(balance.get('locked', '0'))
+                    total = free + locked
+                    if total > 0:
+                        logger.info(f"Moeda: {asset}, Livre: {free}, Bloqueado: {locked}, Total: {total}")
+                except Exception as e:
+                    logger.error(f"Erro ao processar saldo da moeda: {str(e)}")
+        else:
+            logger.warning("Dados da conta não contêm o campo 'balances'. Estrutura recebida: " + 
+                          json.dumps(account_info, indent=2)[:200] + "...")
+        
+        # Obtém o saldo total da conta em BRL/USDT
+        logger.info("Calculando saldo total convertido...")
+        capital = config.get_balance(account_info)
+        logger.info(f"Saldo total convertido: R${capital:.2f}")
+        
+        # Notifica saldo via Telegram
+        if notifier:
+            notifier.notify_status(f"Saldo atual: R${capital:.2f}")
+    except Exception as e:
+        logger.error(f"Erro ao obter informações da conta: {str(e)}")
+        logger.error("Usando valor padrão para o capital")
+        capital = 100.0
     
     # Inicializa estratégia conforme o saldo disponível
     strategy = None
@@ -142,6 +154,41 @@ def main():
     
     # Inicializa estatísticas
     stats = {}
+    
+    # Define a estratégia inicial e os pares com base no capital
+    logger.info(f"Inicializando estratégia com capital de R${capital:.2f}")
+    
+    # Se temos configuração explícita de pares, usamos ela como base
+    config_pairs = getattr(config, 'trading_pairs', [])
+    if config_pairs:
+        logger.info(f"Usando pares configurados: {config_pairs}")
+        pairs = config_pairs
+    
+    # Seleciona estratégia baseada no capital
+    if capital < 300:
+        logger.info("Inicializando com estratégia de Scalping (capital < R$300)")
+        strategy = ScalpingStrategy(config, binance)
+        
+        # Define pares padrão para Scalping se não tiver configuração explícita
+        if not pairs:
+            if config.use_testnet:
+                pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
+                logger.info("Usando pares padrão compatíveis com testnet para scalping")
+            else:
+                pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"]
+                logger.info("Usando pares padrão para scalping")
+    else:
+        logger.info("Inicializando com estratégia de Swing Trading (capital >= R$300)")
+        strategy = SwingTradingStrategy(config, binance)
+        
+        # Define pares padrão para Swing Trading se não tiver configuração explícita
+        if not pairs:
+            if config.use_testnet:
+                pairs = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"]
+                logger.info("Usando pares padrão compatíveis com testnet para swing trading")
+            else:
+                pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT", "FLOKI/USDT"]
+                logger.info("Usando pares padrão para swing trading")
     
     if previous_state and 'stats' in previous_state:
         logger.info("Estado anterior encontrado. Retomando operação...")
@@ -264,6 +311,39 @@ def main():
                         f"⏱️ Tempo de execução: {runtime:.1f} horas"
                     )
             
+            # Verifica se temos pares para analisar
+            if not pairs:
+                logger.warning("Nenhum par de trading disponível para análise!")
+                
+                # Tenta definir alguns pares padrão se não houver nenhum
+                if config.use_testnet:
+                    pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
+                    logger.info("Definindo pares padrão para testnet: " + ", ".join(pairs))
+                else:
+                    pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"]
+                    logger.info("Definindo pares padrão para produção: " + ", ".join(pairs))
+                    
+                # Notifica via Telegram
+                if notifier:
+                    notifier.notify_status(f"⚠️ Nenhum par de trading encontrado. Definidos pares padrão: {', '.join(pairs)}")
+            
+            # Verifica se a estratégia foi inicializada
+            if strategy is None:
+                logger.warning("Estratégia não inicializada! Inicializando com base no capital...")
+                
+                # Inicializa a estratégia com base no capital
+                if capital < 300:
+                    logger.info("Inicializando estratégia de Scalping devido ao capital baixo")
+                    strategy = ScalpingStrategy(config, binance)
+                else:
+                    logger.info("Inicializando estratégia de Swing Trading")
+                    strategy = SwingTradingStrategy(config, binance)
+                
+                # Notifica via Telegram
+                if notifier:
+                    strategy_name = "Scalping" if capital < 300 else "Swing Trading"
+                    notifier.notify_status(f"⚙️ Inicializando estratégia de {strategy_name}")
+            
             # Analisa cada par configurado
             for pair in pairs[:]:  # Cria uma cópia para poder modificar a lista durante o loop
                 logger.info(f"Analisando par {pair}")
@@ -274,6 +354,11 @@ def main():
                 
                 # Tenta analisar o mercado com tratamento de erros específicos
                 try:
+                    # Verifica se a estratégia tem o método necessário
+                    if not hasattr(strategy, 'analyze_market') or not callable(getattr(strategy, 'analyze_market')):
+                        logger.error(f"Estratégia não tem método 'analyze_market'. Tipo: {type(strategy)}")
+                        continue
+                    
                     # Analisa mercado e executa ordens conforme a estratégia
                     should_trade, action, price = strategy.analyze_market(pair, notifier=notifier)
                 except requests.exceptions.RequestException as e:
@@ -288,6 +373,10 @@ def main():
                         # Notifica via Telegram
                         if notifier:
                             notifier.notify_status(f"⚠️ Par {pair} não está disponível e foi removido da lista")
+                    continue  # Pula para o próximo par
+                except Exception as e:
+                    logger.error(f"Erro inesperado ao analisar par {pair}: {str(e)}")
+                    logger.exception("Detalhes do erro:")
                     continue  # Pula para o próximo par
                 
                 if should_trade:
