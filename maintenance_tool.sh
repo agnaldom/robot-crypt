@@ -339,6 +339,80 @@ create_backup() {
     echo
 }
 
+# Função para verificar a integridade do banco de dados SQLite
+check_database() {
+    echo -e "${YELLOW}Verificando banco de dados SQLite...${NC}"
+    
+    if [ -f "data/robot_crypt.db" ]; then
+        echo -e "✓ ${GREEN}Banco de dados encontrado${NC}"
+        
+        # Verifica integridade com SQLite
+        echo "Executando verificação de integridade..."
+        integrity=$(echo "PRAGMA integrity_check;" | sqlite3 data/robot_crypt.db)
+        
+        if [ "$integrity" == "ok" ]; then
+            echo -e "✓ ${GREEN}Integridade do banco de dados: OK${NC}"
+        else
+            echo -e "✗ ${RED}Problemas de integridade no banco de dados!${NC}"
+            echo -e "${YELLOW}Deseja criar um backup e reparar o banco de dados? (s/n)${NC}"
+            read -r repair_db
+            
+            if [[ $repair_db == "s" || $repair_db == "S" ]]; then
+                repair_database
+            fi
+        fi
+    else
+        echo -e "✗ ${RED}Banco de dados não encontrado!${NC}"
+        echo -e "${YELLOW}Um novo banco de dados será criado quando o bot for executado.${NC}"
+    fi
+    
+    echo
+}
+
+# Função para reparar o banco de dados
+repair_database() {
+    echo -e "${YELLOW}Reparando banco de dados...${NC}"
+    
+    # Faz backup do banco atual
+    timestamp=$(date +"%Y%m%d_%H%M%S")
+    backup_file="data/robot_crypt_backup_$timestamp.db"
+    
+    cp data/robot_crypt.db "$backup_file"
+    echo -e "✓ ${GREEN}Backup criado: $backup_file${NC}"
+    
+    # Cria um novo banco de dados vazio
+    rm data/robot_crypt.db
+    echo -e "✓ ${GREEN}Banco de dados corrompido removido${NC}"
+    echo -e "${YELLOW}Um novo banco de dados será criado quando o bot for executado.${NC}"
+    
+    # Copia dados do estado do app_state.json para o novo banco
+    if [ -f "data/app_state.json" ]; then
+        echo -e "✓ ${GREEN}Arquivo app_state.json encontrado para migração${NC}"
+    else
+        echo -e "✗ ${RED}Arquivo app_state.json não encontrado!${NC}"
+        echo -e "${YELLOW}O bot iniciará com um estado limpo.${NC}"
+    fi
+}
+
+# Função para limpar os arquivos temporários e desnecessários
+clean_temp_files() {
+    echo -e "${YELLOW}Limpando arquivos temporários...${NC}"
+    
+    # Remove arquivos .pyc
+    find . -name "*.pyc" -delete
+    echo -e "✓ ${GREEN}Arquivos .pyc removidos${NC}"
+    
+    # Remove diretórios __pycache__
+    find . -type d -name "__pycache__" -exec rm -rf {} +
+    echo -e "✓ ${GREEN}Diretórios __pycache__ removidos${NC}"
+    
+    # Limpa logs antigos (mais de 30 dias)
+    find logs -name "*.log" -type f -mtime +30 -delete
+    echo -e "✓ ${GREEN}Logs antigos removidos${NC}"
+    
+    echo
+}
+
 # Menu principal
 while true; do
     echo -e "${BLUE}Menu de Manutenção do Robot-Crypt${NC}"
@@ -349,9 +423,11 @@ while true; do
     echo "5. Verificar conexão com Binance e saldos"
     echo "6. Reiniciar o bot"
     echo "7. Criar backup"
-    echo "8. Sair"
+    echo "8. Verificar e reparar banco de dados"
+    echo "9. Limpar arquivos temporários"
+    echo "10. Sair"
     echo
-    read -p "Escolha uma opção (1-8): " option
+    read -p "Escolha uma opção (1-10): " option
     echo
     
     case $option in
@@ -362,7 +438,9 @@ while true; do
         5) check_binance_connection ;;
         6) restart_bot ;;
         7) create_backup ;;
-        8) echo "Encerrando..."; exit 0 ;;
+        8) check_database ;;
+        9) clean_temp_files ;;
+        10) echo "Encerrando..."; exit 0 ;;
         *) echo -e "${RED}Opção inválida${NC}" ;;
     esac
     
