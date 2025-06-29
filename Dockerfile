@@ -12,8 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia os arquivos de requisitos primeiro (para melhor uso do cache do Docker)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Garante que o python-dotenv está instalado
-RUN pip install --no-cache-dir python-dotenv
+# Garante que o python-dotenv e outros pacotes essenciais estão instalados
+RUN pip install --no-cache-dir python-dotenv requests
 
 # Copia o restante dos arquivos do projeto
 COPY . .
@@ -23,9 +23,13 @@ RUN mkdir -p /app/logs
 RUN mkdir -p /app/data
 RUN mkdir -p /app/reports
 
+# Torna o script de entrada executável
+RUN chmod +x /app/railway_entrypoint.sh
+
 # Define variáveis de ambiente
 ENV PYTHONUNBUFFERED=1
 ENV TZ=America/Sao_Paulo
+ENV PYTHONIOENCODING=utf-8
 
 # Define o comando de entrada
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["/app/railway_entrypoint.sh"]

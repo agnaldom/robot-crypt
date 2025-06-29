@@ -4,7 +4,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python main.py"
+startCommand = "/app/railway_entrypoint.sh"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
@@ -14,3 +14,10 @@ restartPolicyMaxRetries = 10
 # Use o comando: railway variables set RAILWAY_REGION=asia-southeast1-eqsg3a
 [variables]
 # Configure as variáveis de ambiente do bot via dashboard do Railway
+# Variáveis essenciais:
+# BINANCE_API_KEY - Chave da API Binance
+# BINANCE_API_SECRET - Segredo da API Binance
+# USE_TESTNET - "true" ou "false"
+# TELEGRAM_BOT_TOKEN - Token do bot do Telegram (opcional)
+# TELEGRAM_CHAT_ID - ID do chat do Telegram (opcional)
+# TRADING_PAIRS - Pares de negociação separados por vírgulas (opcional)

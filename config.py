@@ -162,10 +162,13 @@ class Config:
     
     def get_balance(self, account_info):
         """Calcula o saldo total em BRL ou equivalente"""
+        import logging
+        logger = logging.getLogger("robot-crypt")
         balance = 0.0
         
         # Se não tivermos dados da conta, retorna o valor padrão para simulação
         if not account_info or not isinstance(account_info, dict):
+            logger.warning("Dados da conta inválidos ou ausentes, usando valor padrão para simulação: 100.0 BRL")
             return 100.0  # Valor padrão para simulação
         
         # Taxas de conversão aproximadas para BRL
@@ -177,30 +180,41 @@ class Config:
             'BNB': 2250.0      # 1 BNB ≈ 2,250 BRL
         }
         
-        # Pega os saldos da conta
-        if 'balances' in account_info:
-            for asset in account_info['balances']:
-                asset_name = asset['asset']
-                asset_balance = float(asset['free']) + float(asset['locked'])
-                
-                # Só considera ativos com saldo positivo
-                if asset_balance > 0:
-                    # Se temos taxa de conversão para esse ativo
-                    if asset_name in conversion_rates:
-                        balance += asset_balance * conversion_rates[asset_name]
-                        print(f"Saldo de {asset_name}: {asset_balance} = {asset_balance * conversion_rates[asset_name]} BRL")
-                    # Para outros ativos, tentamos uma estimativa conservadora
-                    elif asset_balance > 0:
-                        # Assumimos um valor conservador de 1 BRL por unidade para ativos desconhecidos
-                        # Se for um altcoin, isso pode estar subestimado, mas é melhor que ignorar
-                        estimated_value = asset_balance * 1.0  # valor conservador
-                        balance += estimated_value
-                        print(f"Saldo de {asset_name}: {asset_balance} (valor estimado: {estimated_value} BRL)")
-        
-        # Se ainda não encontramos saldo, usar valor padrão para simulação
-        if balance == 0:
-            balance = 100.0
-            print("Nenhum saldo detectado, usando valor padrão para simulação: 100.0 BRL")
+        try:
+            # Pega os saldos da conta
+            if 'balances' in account_info:
+                for asset in account_info['balances']:
+                    try:
+                        asset_name = asset['asset']
+                        asset_balance = float(asset.get('free', '0')) + float(asset.get('locked', '0'))
+                        
+                        # Só considera ativos com saldo positivo
+                        if asset_balance > 0:
+                            # Se temos taxa de conversão para esse ativo
+                            if asset_name in conversion_rates:
+                                asset_value = asset_balance * conversion_rates[asset_name]
+                                balance += asset_value
+                                logger.debug(f"Saldo de {asset_name}: {asset_balance} = {asset_value:.2f} BRL")
+                            # Para outros ativos, tentamos uma estimativa conservadora
+                            else:
+                                # Assumimos um valor conservador de 1 BRL por unidade para ativos desconhecidos
+                                # Se for um altcoin, isso pode estar subestimado, mas é melhor que ignorar
+                                estimated_value = asset_balance * 1.0  # valor conservador
+                                balance += estimated_value
+                                logger.debug(f"Saldo de {asset_name}: {asset_balance} (valor estimado: {estimated_value:.2f} BRL)")
+                    except (KeyError, ValueError, TypeError) as e:
+                        logger.warning(f"Erro ao processar saldo do ativo: {str(e)}")
+                        continue
             
-        print(f"Saldo total estimado: {balance:.2f} BRL")
-        return balance
+            # Se ainda não encontramos saldo, usar valor padrão para simulação
+            if balance == 0:
+                balance = 100.0
+                logger.warning("Nenhum saldo detectado, usando valor padrão para simulação: 100.0 BRL")
+                
+            logger.info(f"Saldo total estimado: {balance:.2f} BRL")
+            return balance
+            
+        except Exception as e:
+            logger.error(f"Erro ao calcular saldo total: {str(e)}")
+            logger.error("Usando valor padrão de 100.0 BRL")
+            return 100.0  # Valor padrão em caso de erro
