@@ -352,6 +352,26 @@ check_database() {
         
         if [ "$integrity" == "ok" ]; then
             echo -e "✓ ${GREEN}Integridade do banco de dados: OK${NC}"
+            
+            # Oferece opção para migrar formato de estatísticas
+            echo -e "${YELLOW}Deseja verificar e migrar formato de estatísticas antigas para corrigir possíveis erros? (s/n)${NC}"
+            read -r migrate_stats
+            
+            if [[ $migrate_stats == "s" || $migrate_stats == "S" ]]; then
+                echo "Migrando formato de estatísticas..."
+                python -c "
+import sys
+sys.path.append('.')
+from db_manager import DBManager
+
+db = DBManager()
+if db.migrate_db_stats():
+    print('Migração concluída com sucesso')
+else:
+    print('Erro durante a migração')
+"
+                echo -e "✓ ${GREEN}Verificação e migração de dados concluídas${NC}"
+            fi
         else
             echo -e "✗ ${RED}Problemas de integridade no banco de dados!${NC}"
             echo -e "${YELLOW}Deseja criar um backup e reparar o banco de dados? (s/n)${NC}"
@@ -425,9 +445,10 @@ while true; do
     echo "7. Criar backup"
     echo "8. Verificar e reparar banco de dados"
     echo "9. Limpar arquivos temporários"
-    echo "10. Sair"
+    echo "10. Migrar arquivos de estado (corrigir erro 'total_trades')"
+    echo "11. Sair"
     echo
-    read -p "Escolha uma opção (1-10): " option
+    read -p "Escolha uma opção (1-11): " option
     echo
     
     case $option in
@@ -440,7 +461,12 @@ while true; do
         7) create_backup ;;
         8) check_database ;;
         9) clean_temp_files ;;
-        10) echo "Encerrando..."; exit 0 ;;
+        10) 
+            echo -e "${YELLOW}Migrando arquivos de estado...${NC}"
+            python migrate_stats.py
+            echo -e "${GREEN}✓ Migração concluída${NC}"
+            ;;
+        11) echo "Encerrando..."; exit 0 ;;
         *) echo -e "${RED}Opção inválida${NC}" ;;
     esac
     

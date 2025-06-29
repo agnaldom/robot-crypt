@@ -147,9 +147,43 @@ def main():
         logger.info("Estado anterior encontrado. Retomando operação...")
         stats = previous_state['stats']
         
+        # Migração de chaves antigas para novas
+        # Isso garante compatibilidade com estados salvos antes da atualização
+        key_mapping = {
+            'trades_total': 'total_trades',
+            'trades_win': 'winning_trades',
+            'trades_loss': 'losing_trades'
+        }
+        
+        # Migra chaves antigas para novas se necessário
+        for old_key, new_key in key_mapping.items():
+            if old_key in stats and new_key not in stats:
+                logger.info(f"Migrando estatística: {old_key} -> {new_key}")
+                stats[new_key] = stats[old_key]
+        
+        # Garante que todas as chaves estatísticas necessárias existam
+        required_stats = {
+            'total_trades': 0,
+            'winning_trades': 0,
+            'losing_trades': 0,
+            'best_trade_profit': 0,
+            'worst_trade_loss': 0,
+            'initial_capital': capital,
+            'current_capital': capital,
+            'profit_history': []
+        }
+        
+        for key, default_value in required_stats.items():
+            if key not in stats:
+                logger.warning(f"Chave {key} não encontrada nas estatísticas. Criando com valor padrão.")
+                stats[key] = default_value
+        
         # Converte a string de data de volta para datetime
         if 'start_time' in stats and isinstance(stats['start_time'], str):
             stats['start_time'] = datetime.fromisoformat(stats['start_time'])
+        else:
+            logger.warning("Chave start_time não encontrada nas estatísticas. Criando com valor atual.")
+            stats['start_time'] = datetime.now()
         
         # Obtém hora da última verificação
         if 'last_check_time' in previous_state and isinstance(previous_state['last_check_time'], str):
@@ -409,15 +443,16 @@ def main():
                 # Prepara o estado para ser salvo
                 state_to_save = {
                     'stats': {
-                        'total_trades': stats['total_trades'],
-                        'winning_trades': stats['winning_trades'],
-                        'losing_trades': stats['losing_trades'],
-                        'initial_capital': stats['initial_capital'],
-                        'current_capital': stats['current_capital'],
-                        'best_trade_profit': stats['best_trade_profit'],
-                        'worst_trade_loss': stats['worst_trade_loss'],
-                        'start_time': stats['start_time'].isoformat() if isinstance(stats['start_time'], datetime) else stats['start_time'],
-                        'profit_history': stats['profit_history']
+                        # Verifica se todas as chaves necessárias existem antes de salvar
+                        'total_trades': stats.get('total_trades', 0),
+                        'winning_trades': stats.get('winning_trades', 0),
+                        'losing_trades': stats.get('losing_trades', 0),
+                        'initial_capital': stats.get('initial_capital', config.get_balance(account_info)),
+                        'current_capital': stats.get('current_capital', config.get_balance(account_info)),
+                        'best_trade_profit': stats.get('best_trade_profit', 0),
+                        'worst_trade_loss': stats.get('worst_trade_loss', 0),
+                        'start_time': stats.get('start_time', datetime.now()).isoformat() if isinstance(stats.get('start_time', datetime.now()), datetime) else stats.get('start_time', datetime.now().isoformat()),
+                        'profit_history': stats.get('profit_history', [])
                     },
                     'last_check_time': datetime.now().isoformat(),
                     'strategy_type': strategy.__class__.__name__,
@@ -488,19 +523,20 @@ def main():
             # Prepara o estado para ser salvo
             state_to_save = {
                 'stats': {
-                    'total_trades': stats['total_trades'],
-                    'winning_trades': stats['winning_trades'],
-                    'losing_trades': stats['losing_trades'],
-                    'initial_capital': stats['initial_capital'],
-                    'current_capital': stats['current_capital'],
-                    'best_trade_profit': stats['best_trade_profit'],
-                    'worst_trade_loss': stats['worst_trade_loss'],
-                    'start_time': stats['start_time'].isoformat() if isinstance(stats['start_time'], datetime) else stats['start_time'],
-                    'profit_history': stats['profit_history']
+                    # Verifica se todas as chaves necessárias existem antes de salvar
+                    'total_trades': stats.get('total_trades', 0),
+                    'winning_trades': stats.get('winning_trades', 0),
+                    'losing_trades': stats.get('losing_trades', 0),
+                    'initial_capital': stats.get('initial_capital', 100.0),
+                    'current_capital': stats.get('current_capital', 100.0),
+                    'best_trade_profit': stats.get('best_trade_profit', 0),
+                    'worst_trade_loss': stats.get('worst_trade_loss', 0),
+                    'start_time': stats.get('start_time', datetime.now()).isoformat() if isinstance(stats.get('start_time', datetime.now()), datetime) else stats.get('start_time', datetime.now().isoformat()),
+                    'profit_history': stats.get('profit_history', [])
                 },
                 'last_check_time': datetime.now().isoformat(),
-                'strategy_type': strategy.__class__.__name__,
-                'pairs': pairs
+                'strategy_type': getattr(strategy, '__class__', type(None)).__name__ if strategy else 'None',
+                'pairs': pairs or []
             }
             
             # Adiciona posições abertas se disponíveis
