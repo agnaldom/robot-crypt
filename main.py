@@ -14,6 +14,7 @@ from config import Config
 from utils import setup_logger, save_state, load_state, filtrar_pares_por_liquidez
 from telegram_notifier import TelegramNotifier
 from db_manager import DBManager
+from pathlib import Path
 
 # Configuração de logging
 logger = setup_logger()
@@ -21,6 +22,13 @@ logger = setup_logger()
 def main():
     """Função principal do bot"""
     logger.info("Iniciando Robot-Crypt Bot")
+    
+    # Verifica e cria diretórios necessários
+    for directory in ['data', 'logs', 'reports']:
+        dir_path = Path(__file__).parent / directory
+        if not dir_path.exists():
+            dir_path.mkdir(exist_ok=True, parents=True)
+            logger.info(f"Diretório {directory} criado com sucesso")
     
     # Carrega configuração
     config = Config()
@@ -125,6 +133,12 @@ def main():
     if not previous_state:
         logger.info("Nenhum arquivo de estado encontrado, tentando carregar do banco de dados...")
         previous_state = db.load_last_app_state()
+        
+        # Se encontrou no banco de dados, salva também como arquivo para compatibilidade
+        if previous_state:
+            logger.info("Estado carregado do banco de dados com sucesso")
+            save_state(previous_state)
+            logger.info("Estado migrado do banco de dados para arquivo JSON")
     
     # Inicializa estatísticas
     stats = {}
@@ -169,9 +183,9 @@ def main():
     else:
         # Inicializa novas estatísticas de trading
         stats = {
-            'trades_total': 0,
-            'trades_win': 0,
-            'trades_loss': 0,
+            'total_trades': 0,  # Renomeado de trades_total para corresponder ao DB
+            'winning_trades': 0,  # Renomeado de trades_win para corresponder ao DB
+            'losing_trades': 0,   # Renomeado de trades_loss para corresponder ao DB
             'initial_capital': capital,
             'current_capital': capital,
             'best_trade_profit': 0,
@@ -196,10 +210,10 @@ def main():
                 logger.info(f"RELATÓRIO DE PERFORMANCE - {stats['start_time'].strftime('%d/%m/%Y')} até agora")
                 logger.info(f"Capital inicial: R${stats['initial_capital']:.2f}")
                 logger.info(f"Capital atual: R${stats['current_capital']:.2f} ({return_percent:+.2f}%)")
-                logger.info(f"Trades totais: {stats['trades_total']}")
+                logger.info(f"Trades totais: {stats['total_trades']}")
                 
-                if stats['trades_total'] > 0:
-                    win_rate = (stats['trades_win'] / stats['trades_total']) * 100
+                if stats['total_trades'] > 0:
+                    win_rate = (stats['winning_trades'] / stats['total_trades']) * 100
                     logger.info(f"Win rate: {win_rate:.2f}%")
                     logger.info(f"Melhor trade: +{stats['best_trade_profit']:.2f}%")
                     logger.info(f"Pior trade: {stats['worst_trade_loss']:.2f}%")
@@ -212,7 +226,7 @@ def main():
                     notifier.notify_status(
                         f"📊 RELATÓRIO DE DESEMPENHO:\n"
                         f"💰 Capital: R${stats['current_capital']:.2f} ({return_percent:+.2f}%)\n"
-                        f"📈 Trades: {stats['trades_win']} ganhos, {stats['trades_loss']} perdas\n"
+                        f"📈 Trades: {stats['winning_trades']} ganhos, {stats['losing_trades']} perdas\n"
                         f"⏱️ Tempo de execução: {runtime:.1f} horas"
                     )
             
@@ -254,14 +268,14 @@ def main():
                         
                         if success:
                             # Atualiza estatísticas
-                            stats['trades_total'] += 1
+                            stats['total_trades'] += 1
                             profit_percent = order_info['profit'] * 100
                             
                             if profit_percent > 0:
-                                stats['trades_win'] += 1
+                                stats['winning_trades'] += 1
                                 stats['best_trade_profit'] = max(stats['best_trade_profit'], profit_percent)
                             else:
-                                stats['trades_loss'] += 1
+                                stats['losing_trades'] += 1
                                 stats['worst_trade_loss'] = min(stats['worst_trade_loss'], profit_percent)
                                 
                             # Atualiza capital
@@ -395,9 +409,9 @@ def main():
                 # Prepara o estado para ser salvo
                 state_to_save = {
                     'stats': {
-                        'trades_total': stats['trades_total'],
-                        'trades_win': stats['trades_win'],
-                        'trades_loss': stats['trades_loss'],
+                        'total_trades': stats['total_trades'],
+                        'winning_trades': stats['winning_trades'],
+                        'losing_trades': stats['losing_trades'],
                         'initial_capital': stats['initial_capital'],
                         'current_capital': stats['current_capital'],
                         'best_trade_profit': stats['best_trade_profit'],
@@ -474,9 +488,9 @@ def main():
             # Prepara o estado para ser salvo
             state_to_save = {
                 'stats': {
-                    'trades_total': stats['trades_total'],
-                    'trades_win': stats['trades_win'],
-                    'trades_loss': stats['trades_loss'],
+                    'total_trades': stats['total_trades'],
+                    'winning_trades': stats['winning_trades'],
+                    'losing_trades': stats['losing_trades'],
                     'initial_capital': stats['initial_capital'],
                     'current_capital': stats['current_capital'],
                     'best_trade_profit': stats['best_trade_profit'],
