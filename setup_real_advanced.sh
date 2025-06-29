@@ -97,6 +97,23 @@ esac
 read -p "Pares de trading (separados por vírgula) [$default_pairs]: " trading_pairs
 trading_pairs=${trading_pairs:-$default_pairs}
 
+# Verificar pares problemáticos
+problematic_pairs=("ETHBNB")
+for pair in ${problematic_pairs[@]}; do
+    if [[ $trading_pairs == *"$pair"* ]]; then
+        echo
+        echo "⚠️  AVISO: O par $pair foi detectado na sua lista de pares."
+        echo "    Este par pode causar erros na API da Binance."
+        echo "    Recomendamos remover este par ou substituí-lo por outro."
+        echo
+        read -p "Deseja remover o par $pair da sua lista? (s/n): " remove_pair
+        if [[ $remove_pair == "s" || $remove_pair == "S" ]]; then
+            trading_pairs=$(echo $trading_pairs | sed "s/,\?$pair//g" | sed "s/,,/,/g" | sed "s/^,//" | sed "s/,$//")
+            echo "Par $pair removido. Nova lista: $trading_pairs"
+        fi
+    fi
+done
+
 # Configuração de parâmetros de trading
 echo
 echo "Configuração de Parâmetros de Trading"

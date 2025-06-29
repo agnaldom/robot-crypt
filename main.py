@@ -184,10 +184,14 @@ def main():
         # Define pares padrão para Swing Trading se não tiver configuração explícita
         if not pairs:
             if config.use_testnet:
-                pairs = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"]
+                pairs = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"] 
                 logger.info("Usando pares padrão compatíveis com testnet para swing trading")
             else:
                 pairs = ["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT", "FLOKI/USDT"]
+                # Remova ETH/BNB especificamente pois sabemos que causa erro
+                if "ETH/BNB" in pairs:
+                    pairs.remove("ETH/BNB")
+                    logger.info("Removendo ETH/BNB pois causa erro na API")
                 logger.info("Usando pares padrão para swing trading")
     
     if previous_state and 'stats' in previous_state:
@@ -345,6 +349,16 @@ def main():
                     notifier.notify_status(f"⚙️ Inicializando estratégia de {strategy_name}")
             
             # Analisa cada par configurado
+            # Primeiro verifica e remove pares problemáticos conhecidos
+            problematic_pairs = ["ETH/BNB"]
+            for prob_pair in problematic_pairs:
+                if prob_pair in pairs:
+                    logger.warning(f"Removendo par problemático conhecido: {prob_pair}")
+                    pairs.remove(prob_pair)
+                    # Notifica via Telegram
+                    if notifier:
+                        notifier.notify_status(f"⚠️ Par {prob_pair} é conhecido por causar problemas e foi removido da lista")
+
             for pair in pairs[:]:  # Cria uma cópia para poder modificar a lista durante o loop
                 logger.info(f"Analisando par {pair}")
                 
@@ -368,11 +382,25 @@ def main():
                     # Se for um erro 400 (Bad Request), provavelmente o par não existe
                     if hasattr(e, 'response') and e.response and e.response.status_code == 400:
                         logger.warning(f"Par {pair} não disponível. Removendo da lista de pares...")
-                        pairs.remove(pair)
+                        
+                        # Tenta remover o par da lista com segurança
+                        try:
+                            pairs.remove(pair)
+                        except ValueError:
+                            logger.warning(f"Par {pair} já foi removido da lista")
                         
                         # Notifica via Telegram
                         if notifier:
                             notifier.notify_status(f"⚠️ Par {pair} não está disponível e foi removido da lista")
+                            
+                        # Verifica se é um par BNB e sugere inverter a ordem se for o caso
+                        if '/BNB' in pair:
+                            inverted_pair = f"BNB/{pair.split('/')[0]}"
+                            logger.info(f"Tentando par invertido {inverted_pair} como alternativa...")
+                            
+                            # Notifica via Telegram sobre a tentativa de par invertido
+                            if notifier:
+                                notifier.notify_status(f"🔄 Tentando par invertido {inverted_pair} como alternativa")
                     continue  # Pula para o próximo par
                 except Exception as e:
                     logger.error(f"Erro inesperado ao analisar par {pair}: {str(e)}")

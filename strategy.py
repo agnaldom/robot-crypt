@@ -91,6 +91,9 @@ class ScalpingStrategy(TradingStrategy):
             # Formata o símbolo corretamente para a API
             api_symbol = symbol.replace('/', '')  # Remove a barra (ex: "BTC/USDT" -> "BTCUSDT")
             
+            # Registra o símbolo que está sendo consultado para depuração
+            self.logger.info(f"Consultando dados para o símbolo {api_symbol} (período: {period}, lookback: {lookback})")
+            
             # Obtém dados de velas do período especificado
             klines = self.binance.get_klines(api_symbol, period, lookback)
             

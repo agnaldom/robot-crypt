@@ -94,6 +94,10 @@ class BinanceAPI:
             self.logger.debug(f"Request: {method} {endpoint} - Timestamp: {params['timestamp']} - Sig: {params['signature'][:8]}...")
         
         try:
+            # Adiciona log detalhado para parâmetros importantes como symbol
+            if 'symbol' in params:
+                self.logger.info(f"Fazendo requisição para símbolo: {params['symbol']}")
+            
             self.logger.debug(f"Enviando requisição {method} para {url}")
             
             if method == 'GET':
