@@ -101,6 +101,24 @@ class DBManager:
         """Atualiza ou insere estatísticas diárias"""
         today = datetime.now().date().isoformat()
         try:
+            # Garantir que temos todas as chaves necessárias com valores padrão
+            # Isso evita KeyError quando algum campo estiver faltando
+            default_stats = {
+                'current_capital': 100.0,  # Valor padrão para capital
+                'initial_capital': 100.0,  # Valor padrão para capital inicial
+                'total_trades': 0,         # Valor padrão para total de trades
+                'winning_trades': 0,       # Valor padrão para trades com lucro
+                'losing_trades': 0,        # Valor padrão para trades com prejuízo
+                'best_trade_profit': 0.0,  # Valor padrão para melhor trade
+                'worst_trade_loss': 0.0    # Valor padrão para pior trade
+            }
+            
+            # Atualiza os valores padrão com os valores reais, se existirem
+            for key, default_value in default_stats.items():
+                if key not in stats:
+                    self.logger.warning(f"Estatística '{key}' não encontrada, usando valor padrão: {default_value}")
+                    stats[key] = default_value
+            
             # Verifica se já existe uma entrada para hoje
             self.cursor.execute('SELECT id FROM stats WHERE date = ?', (today,))
             result = self.cursor.fetchone()
@@ -206,6 +224,52 @@ class DBManager:
         except Exception as e:
             self.logger.error(f"Erro ao obter histórico de estatísticas: {str(e)}")
             return []
+    
+    def migrate_db_stats(self):
+        """Migra estatísticas do banco de dados para o novo formato de nomes de campo"""
+        try:
+            # Verifica se há alguma entrada na tabela stats
+            self.cursor.execute('SELECT COUNT(*) as count FROM stats')
+            result = self.cursor.fetchone()
+            if result and result['count'] > 0:
+                self.logger.info(f"Encontradas {result['count']} entradas na tabela stats para migração")
+                
+                # Verifica se as colunas antigas existem (isso pode ser uma operação complexa no SQLite)
+                # Como alternativa, vamos tentar carregar dados de app_state e migrar para o banco
+                
+                # Carrega o último estado da aplicação
+                last_state = self.load_last_app_state()
+                if last_state and 'stats' in last_state:
+                    stats = last_state['stats']
+                    
+                    # Mapeia chaves antigas para novas se necessário
+                    key_mapping = {
+                        'trades_total': 'total_trades',
+                        'trades_win': 'winning_trades',
+                        'trades_loss': 'losing_trades'
+                    }
+                    
+                    # Verifica se precisamos migrar
+                    needs_migration = False
+                    for old_key, new_key in key_mapping.items():
+                        if old_key in stats and new_key not in stats:
+                            stats[new_key] = stats[old_key]
+                            self.logger.info(f"Migrando {old_key} para {new_key} no estado do banco de dados")
+                            needs_migration = True
+                    
+                    if needs_migration:
+                        # Salva o estado migrado de volta no banco
+                        self.save_app_state(last_state)
+                        self.logger.info("Estado migrado salvo com sucesso no banco de dados")
+                    else:
+                        self.logger.info("Nenhuma migração necessária para o estado no banco de dados")
+                return True
+            else:
+                self.logger.info("Nenhuma entrada na tabela stats para migrar")
+                return True
+        except Exception as e:
+            self.logger.error(f"Erro ao migrar estatísticas do banco de dados: {str(e)}")
+            return False
     
     def close(self):
         """Fecha a conexão com o banco de dados"""
