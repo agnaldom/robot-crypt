@@ -8,6 +8,8 @@ import hashlib
 import requests
 import logging
 import os
+import json
+from datetime import datetime
 from urllib.parse import urlencode
 
 class BinanceAPI:
@@ -26,6 +28,11 @@ class BinanceAPI:
             self.base_url = "https://api.binance.com/api"
         
         self.logger = logging.getLogger("robot-crypt")
+        
+        # Configurações de logging melhoradas para Docker
+        self.log_request_details = os.environ.get("LOG_REQUEST_DETAILS", "false").lower() in ["true", "1", "yes", "y"]
+        self.log_response_details = os.environ.get("LOG_RESPONSE_DETAILS", "false").lower() in ["true", "1", "yes", "y"]
+        self.show_masked_credentials = os.environ.get("SHOW_MASKED_CREDENTIALS", "true").lower() in ["true", "1", "yes", "y"]
         
         # Configurações de proxy do ambiente
         self.proxies = {}
@@ -69,11 +76,12 @@ class BinanceAPI:
     def _make_request(self, method, endpoint, params=None, signed=False):
         """Faz uma requisição para a API da Binance"""
         url = f"{self.base_url}{endpoint}"
+        start_time = time.time()
         
         # Verifica se API key foi configurada
         if not self.api_key or not self.api_secret:
             error_msg = "API Key e Secret não configurados. Verifique seu arquivo .env"
-            self.logger.error(error_msg)
+            self._log_structured("error", error_msg)
             raise ValueError(error_msg)
         
         headers = {
@@ -90,16 +98,18 @@ class BinanceAPI:
             # Gera assinatura
             params['signature'] = self._generate_signature(params)
             
-            # Log para debug (sem mostrar a assinatura completa)
-            self.logger.debug(f"Request: {method} {endpoint} - Timestamp: {params['timestamp']} - Sig: {params['signature'][:8]}...")
+        # Log estruturado da requisição
+        self._log_request(method, url, params, headers)
+        
+        # Log específico para símbolos (útil para diagnosticar problemas)
+        if 'symbol' in params:
+            self._log_structured("info", f"Processando símbolo: {params['symbol']}", {
+                "symbol": params['symbol'],
+                "endpoint": endpoint,
+                "testnet": self.testnet
+            })
         
         try:
-            # Adiciona log detalhado para parâmetros importantes como symbol
-            if 'symbol' in params:
-                self.logger.info(f"Fazendo requisição para símbolo: {params['symbol']}")
-            
-            self.logger.debug(f"Enviando requisição {method} para {url}")
-            
             if method == 'GET':
                 response = requests.get(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
             elif method == 'POST':
@@ -109,38 +119,112 @@ class BinanceAPI:
             else:
                 raise ValueError(f"Método HTTP não suportado: {method}")
             
-            # Log da resposta para debug
-            self.logger.debug(f"Status: {response.status_code}")
+            # Calcula o tempo de resposta em milissegundos
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            
+            # Log estruturado da resposta
+            content = response.text  # Guarda o texto da resposta antes de tentar parse
+            self._log_response(response.status_code, content[:1000], elapsed_ms)
+            
+            # Log de latência para monitoramento de performance
+            if elapsed_ms > 1000:  # Se demorou mais de 1s
+                self._log_structured("warning", f"Requisição API lenta: {elapsed_ms}ms", {
+                    "elapsed_ms": elapsed_ms,
+                    "endpoint": endpoint,
+                    "method": method
+                })
             
             # Verifica se a requisição foi bem-sucedida
             response.raise_for_status()
             
             return response.json()
         except requests.exceptions.RequestException as e:
-            error_msg = f"Erro na requisição à API da Binance: {str(e)}"
-            self.logger.error(error_msg)
+            # Calcula o tempo decorrido mesmo em caso de erro
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            
+            # Log estruturado detalhado para o erro
+            error_context = {
+                "elapsed_ms": elapsed_ms,
+                "endpoint": endpoint,
+                "method": method,
+                "error_type": e.__class__.__name__,
+            }
             
             if hasattr(e, 'response') and e.response:
+                error_context["status_code"] = e.response.status_code
+                
                 try:
                     error_details = e.response.json()
-                    self.logger.error(f"Detalhes do erro: {error_details}")
+                    error_context["response"] = error_details
                 except:
-                    self.logger.error(f"Resposta: {e.response.text}")
+                    error_context["response_text"] = e.response.text[:500]
             
-            # Se for erro de autenticação na testnet, sugere verificar credenciais específicas da testnet
-            if self.testnet and hasattr(e, 'response') and e.response.status_code == 401:
-                self.logger.error("IMPORTANTE: Para usar a testnet da Binance, você precisa de credenciais específicas da testnet.")
-                self.logger.error("Obtenha credenciais em: https://testnet.binance.vision/")
+            self._log_structured("error", f"Erro na API Binance: {endpoint}", error_context, e)
             
-            # Se for erro 451, indica restrição de IP/região
-            if hasattr(e, 'response') and e.response.status_code == 451:
-                self.logger.error("ERRO 451: Este erro indica que seu acesso está sendo bloqueado devido a restrições de IP ou região.")
-                self.logger.error("Soluções possíveis:")
-                self.logger.error("1. Configure um proxy/VPN em seu deployment")
-                self.logger.error("2. Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY")
-                self.logger.error("3. Considere usar um provedor de hospedagem em uma região permitida pela Binance")
+            # Tratamento para conexão timeout e problemas de rede
+            if isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+                self._log_structured("warning", 
+                    f"Erro de timeout ou conexão ao acessar {endpoint}",
+                    {"endpoint": endpoint, "retry": "auto", "fallback": "dados vazios"}
+                )
+                    
+                if 'account' in endpoint:
+                    self._log_structured("warning", 
+                        "Falha ao obter informações da conta. Retornando dados vazios para tentar continuar.",
+                        {"action": "continue", "fallback_data": "empty_balances"}
+                    )
+                    return {"balances": []}  # Retorna estrutura mínima para evitar falhas
             
-            raise
+            # Tratamento para resposta de erro quando disponível
+            if hasattr(e, 'response') and e.response:
+                # Se for erro de autenticação na testnet, sugere verificar credenciais específicas
+                if self.testnet and e.response.status_code == 401:
+                    self._log_structured("error", 
+                        "Erro de autenticação na TestNet Binance",
+                        {
+                            "status_code": e.response.status_code,
+                            "solution": "Obter novas credenciais TestNet em https://testnet.binance.vision/"
+                        }
+                    )
+                
+                # Se for erro 451, indica restrição de IP/região
+                if e.response.status_code == 451:
+                    self._log_structured("error", 
+                        "Acesso bloqueado por restrições geográficas (Erro 451)",
+                        {
+                            "status_code": 451,
+                            "solutions": [
+                                "Configure um proxy/VPN em seu deployment",
+                                "Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY",
+                                "Considere usar um provedor de hospedagem em região permitida"
+                            ]
+                        }
+                    )
+                    
+                # Se for erro de rate limit, log específico
+                if e.response.status_code == 429:
+                    self._log_structured("warning", 
+                        "Rate limit atingido na API Binance",
+                        {
+                            "status_code": 429,
+                            "recommendation": "Reduzir frequência de requisições ou implementar exponential backoff"
+                        }
+                    )
+            
+            # Para erros críticos, levanta exceção. Para erros de rede, tenta continuar
+            if not isinstance(e, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)):
+                raise
+            
+            # Para erros de rede, retorna um valor padrão para permitir que a execução continue
+            if 'ticker' in endpoint:
+                self._log_structured("warning", "Retornando preço zerado devido a erro de rede", {"fallback": "zero_price"})
+                return {"price": "0"}  # Valor padrão para ticker
+            elif 'klines' in endpoint or 'candlestick' in endpoint:
+                self._log_structured("warning", "Retornando array vazio de candles devido a erro de rede", {"fallback": "empty_array"})
+                return []  # Lista vazia para candlesticks/klines
+            else:
+                self._log_structured("warning", "Retornando objeto vazio devido a erro de rede", {"fallback": "empty_object", "endpoint": endpoint})
+                return {}  # Objeto vazio para outros endpoints
     
     def get_account_info(self):
         """Obtém informações da conta"""
@@ -223,13 +307,17 @@ class BinanceAPI:
         """Testa a conexão com a API da Binance"""
         try:
             # Teste 1: Endpoint de ping que não requer autenticação
-            self.logger.info("Testando conexão básica com a API...")
+            self._log_structured("info", "Iniciando teste de conexão com API Binance", 
+                {"stage": "connection_test", "environment": "testnet" if self.testnet else "production"})
+                
             endpoint = "/v3/ping"
             result = None
             
             try:
                 # Fazemos o request manualmente para evitar exceções neste estágio
                 url = f"{self.base_url}{endpoint}"
+                start_time = time.time()
+                
                 response = requests.get(
                     url, 
                     proxies=self.proxies, 
@@ -238,39 +326,65 @@ class BinanceAPI:
                     },
                     timeout=30
                 )
+                
+                # Calcula tempo de resposta
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                
                 response.raise_for_status()
                 result = response.json()
-                self.logger.info("✓ Conexão básica com a API estabelecida")
+                
+                self._log_structured("info", "Teste de ping concluído com sucesso", {
+                    "test": "basic_connectivity",
+                    "url": url,
+                    "status_code": response.status_code,
+                    "elapsed_ms": elapsed_ms
+                })
             except Exception as e:
-                self.logger.error(f"✗ Falha na conexão básica: {str(e)}")
+                self._log_structured("error", "Falha no teste de conectividade básica", 
+                    {"test": "basic_connectivity", "url": url}, e)
                 
                 # Se for erro 451, indica restrição de IP/região
-                if hasattr(e, 'response') and e.response.status_code == 451:
-                    self.logger.error("ERRO 451: Este erro indica que seu acesso está sendo bloqueado devido a restrições de IP ou região.")
-                    self.logger.error("Soluções possíveis:")
-                    self.logger.error("1. Configure um proxy/VPN em seu deployment")
-                    self.logger.error("2. Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY")
-                    self.logger.error("3. Considere usar um provedor de hospedagem em uma região permitida pela Binance")
+                if hasattr(e, 'response') and e.response and e.response.status_code == 451:
+                    self._log_structured("error", "Acesso bloqueado por restrições geográficas (Erro 451)", {
+                        "status_code": 451,
+                        "solutions": [
+                            "Configure um proxy/VPN em seu deployment",
+                            "Use a variável de ambiente HTTP_PROXY e HTTPS_PROXY",
+                            "Considere usar um provedor de hospedagem em região permitida"
+                        ]
+                    })
                 
                 return False
             
             # Teste 2: Verificando tempo do servidor
-            self.logger.info("Verificando sincronização de tempo com o servidor...")
+            self._log_structured("info", "Verificando sincronização de tempo com o servidor", {"test": "time_sync"})
             try:
                 server_time = self.get_server_time()
                 local_time = int(time.time() * 1000)
                 time_diff = abs(local_time - server_time)
-                self.logger.info(f"✓ Tempo do servidor: {server_time}, Tempo local: {local_time}, Diferença: {time_diff}ms")
                 
+                sync_status = "ok"
                 if time_diff > 1000:  # Mais de 1 segundo de diferença
-                    self.logger.warning(f"⚠️ Diferença de tempo entre cliente e servidor é grande: {time_diff}ms")
+                    sync_status = "warning"
+                elif time_diff > 5000:  # Mais de 5 segundos
+                    sync_status = "critical"
+                    
+                self._log_structured("info" if sync_status == "ok" else "warning", 
+                    f"Sincronização de tempo: {sync_status.upper()}", {
+                        "server_time": server_time,
+                        "local_time": local_time, 
+                        "difference_ms": time_diff,
+                        "status": sync_status
+                    }
+                )
                 
             except Exception as e:
-                self.logger.error(f"✗ Falha ao verificar tempo do servidor: {str(e)}")
+                self._log_structured("error", "Falha ao verificar sincronização de tempo", 
+                    {"test": "time_sync", "continue": True}, e)
                 # Continuamos mesmo com falha neste teste
             
             # Teste 3: Endpoint que requer autenticação
-            self.logger.info("Testando autenticação com a API...")
+            self._log_structured("info", "Testando autenticação com a API", {"test": "authentication"})
             try:
                 if self.testnet:
                     # Na testnet, tentamos obter as ordens abertas (mais simples que account info)
@@ -284,36 +398,208 @@ class BinanceAPI:
                         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
                     }
                     
-                    self.logger.debug(f"Enviando requisição de teste para: {url}")
+                    start_time = time.time()
+                    
+                    # Log estruturado da requisição
+                    safe_headers = headers.copy()
+                    if self.show_masked_credentials:
+                        api_key = safe_headers['X-MBX-APIKEY'] 
+                        safe_headers['X-MBX-APIKEY'] = api_key[:4] + '...' + api_key[-4:]
+                    else:
+                        safe_headers['X-MBX-APIKEY'] = '[REDACTED]'
+                    
+                    self._log_structured("debug", 
+                        f"Enviando requisição de autenticação (testnet): {endpoint}", {
+                            "url": url,
+                            "headers": safe_headers,
+                            "has_signature": "signature" in params
+                        }
+                    )
+                    
                     response = requests.get(url, headers=headers, params=params, proxies=self.proxies, timeout=30)
                     
-                    # Log detalhado para debug
-                    self.logger.debug(f"Status: {response.status_code}")
-                    self.logger.debug(f"Resposta: {response.text[:200]}...")  # Primeiros 200 caracteres
+                    # Calcula tempo de resposta
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    
+                    self._log_structured("debug", 
+                        f"Resposta de autenticação recebida: {response.status_code}", {
+                            "status_code": response.status_code,
+                            "elapsed_ms": elapsed_ms,
+                            "content_preview": response.text[:100]
+                        }
+                    )
                     
                     response.raise_for_status()
-                    self.logger.info("✓ Autenticação bem-sucedida (testnet)")
+                    self._log_structured("info", "Autenticação testnet bem-sucedida", 
+                        {"test": "authentication", "environment": "testnet", "status": "success"})
                 else:
                     # Na produção, usamos account info
                     self.get_account_info()
-                    self.logger.info("✓ Autenticação bem-sucedida")
+                    self._log_structured("info", "Autenticação produção bem-sucedida", 
+                        {"test": "authentication", "environment": "production", "status": "success"})
                 
                 return True
             except Exception as e:
-                self.logger.error(f"✗ Falha na autenticação: {str(e)}")
+                self._log_structured("error", "Falha na autenticação", {"test": "authentication"}, e)
                 
                 if self.testnet:
-                    self.logger.error("NOTA: Para a testnet da Binance você precisa de credenciais específicas.")
-                    self.logger.error("Gere uma chave testnet em: https://testnet.binance.vision/")
+                    self._log_structured("error", "Credenciais TestNet inválidas ou expiradas", {
+                        "solution": "Gere uma nova chave testnet em https://testnet.binance.vision/",
+                        "note": "As credenciais da TestNet expiram após 30 dias"
+                    })
                 
                 return False
                 
         except Exception as e:
-            self.logger.error(f"Erro geral ao testar conexão: {str(e)}")
+            self._log_structured("error", "Erro geral ao testar conexão com Binance API", 
+                {"test": "general", "recoverable": False}, e)
             return False
     
     def get_server_time(self):
         """Obtém o tempo do servidor da Binance para sincronização"""
         endpoint = "/v3/time"
-        result = self._make_request('GET', endpoint)
-        return result["serverTime"]
+        self._log_structured("debug", "Consultando tempo do servidor Binance", {"endpoint": endpoint})
+        start_time = time.time()
+        
+        try:
+            result = self._make_request('GET', endpoint)
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            
+            self._log_structured("debug", "Tempo do servidor obtido com sucesso", {
+                "server_time": result["serverTime"],
+                "local_time": int(time.time() * 1000),
+                "request_time_ms": elapsed_ms
+            })
+            
+            return result["serverTime"]
+        except Exception as e:
+            self._log_structured("error", "Falha ao obter tempo do servidor", 
+                {"endpoint": endpoint, "fallback": "local_time"}, e)
+            # Retorna tempo local como fallback
+            return int(time.time() * 1000)
+    
+    def _log_structured(self, level, message, data=None, error=None):
+        """
+        Cria logs estruturados que são mais fáceis de analisar em ambientes Docker/Cloud
+        
+        Args:
+            level: Nível de log (info, warning, error, debug)
+            message: Mensagem principal do log
+            data: Dados adicionais a serem incluídos no log (dict)
+            error: Objeto de exceção ou string de erro
+        """
+        log_data = {
+            "timestamp": datetime.now().isoformat(),
+            "service": "binance-api",
+            "message": message,
+            "level": level,
+        }
+        
+        if data:
+            log_data["data"] = data
+            
+        if error:
+            if isinstance(error, Exception):
+                log_data["error"] = {
+                    "type": error.__class__.__name__,
+                    "message": str(error)
+                }
+            else:
+                log_data["error"] = {"message": str(error)}
+        
+        # Os logs estruturados são melhores para ambientes containerizados
+        # mas também queremos manter o formato legível para desenvolvimento
+        if os.environ.get("LOG_FORMAT", "").lower() == "json":
+            # Formato JSON para ambientes de produção/container
+            log_entry = json.dumps(log_data)
+        else:
+            # Formato legível para desenvolvimento
+            if data or error:
+                extras = []
+                if data:
+                    extras.append(f"data={json.dumps(data, ensure_ascii=False)[:100]}")
+                if error:
+                    if isinstance(error, Exception):
+                        extras.append(f"error={error.__class__.__name__}: {str(error)}")
+                    else:
+                        extras.append(f"error={str(error)}")
+                log_entry = f"{message} | {' | '.join(extras)}"
+            else:
+                log_entry = message
+        
+        # Use o logger apropriado com base no nível
+        if level == "error":
+            self.logger.error(log_entry)
+        elif level == "warning":
+            self.logger.warning(log_entry)
+        elif level == "debug":
+            self.logger.debug(log_entry)
+        else:
+            self.logger.info(log_entry)
+            
+    def _log_request(self, method, url, params=None, headers=None):
+        """Log detalhado de requisição de API com formato amigável para Docker"""
+        if not self.log_request_details:
+            return
+            
+        # Cria cópia dos parâmetros para evitar modificar os originais
+        safe_params = {}
+        if params:
+            safe_params = params.copy()
+            
+            # Remove dados sensíveis
+            if 'signature' in safe_params:
+                safe_params['signature'] = safe_params['signature'][:8] + '...'
+                
+        # Cria cópia dos headers para evitar modificar os originais
+        safe_headers = {}
+        if headers:
+            safe_headers = headers.copy()
+            
+            # Remove dados sensíveis
+            if 'X-MBX-APIKEY' in safe_headers and self.show_masked_credentials:
+                key = safe_headers['X-MBX-APIKEY']
+                if len(key) > 8:
+                    safe_headers['X-MBX-APIKEY'] = key[:4] + '...' + key[-4:]
+                else:
+                    safe_headers['X-MBX-APIKEY'] = '****'
+            elif 'X-MBX-APIKEY' in safe_headers:
+                safe_headers['X-MBX-APIKEY'] = '[REDACTED]'
+                
+        self._log_structured(
+            "debug",
+            f"API Request: {method} {url}",
+            {
+                "method": method,
+                "url": url,
+                "params": safe_params,
+                "headers": safe_headers,
+                "environment": "testnet" if self.testnet else "production"
+            }
+        )
+        
+    def _log_response(self, status_code, content, elapsed_ms=None):
+        """Log detalhado de resposta de API com formato amigável para Docker"""
+        if not self.log_response_details:
+            return
+            
+        # Prepara o conteúdo para log, limitando o tamanho
+        if isinstance(content, str) and len(content) > 500:
+            safe_content = content[:500] + "..."
+        elif isinstance(content, dict):
+            # Para dicts, converte para string e limita tamanho
+            safe_content = json.dumps(content, ensure_ascii=False)[:500]
+            if len(safe_content) == 500:
+                safe_content += "..."
+        else:
+            safe_content = str(content)
+            
+        self._log_structured(
+            "debug" if status_code < 400 else "error",
+            f"API Response: Status {status_code}",
+            {
+                "status_code": status_code,
+                "response": safe_content,
+                "elapsed_ms": elapsed_ms
+            }
+        )
