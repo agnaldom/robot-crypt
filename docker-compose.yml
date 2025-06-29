@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
     environment:
       - TZ=America/Sao_Paulo
+    command: python main.py
     
   # Serviço opcional para visualização de logs
   # Descomente para usar

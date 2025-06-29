@@ -102,6 +102,9 @@ class ScalpingStrategy(TradingStrategy):
             lows = [float(k[3]) for k in klines]
             highs = [float(k[2]) for k in klines]
             
+            # Verificar se estamos lidando com uma criptomoeda de valor muito baixo (como SHIB, FLOKI)
+            is_micro_value = max(closes) < 0.01
+            
             # Calcula a média móvel das últimas 8 velas para tendência
             short_ma = sum(closes[-8:]) / 8
             
@@ -117,14 +120,25 @@ class ScalpingStrategy(TradingStrategy):
             # Preço atual
             current_price = closes[-1]
             
-            self.logger.info(f"{symbol} - Variação 1h: {hourly_change:.2f}% | Suporte: {support:.2f} | Resistência: {resistance:.2f}")
+            # Para moedas com valores muito pequenos, formatamos a saída de modo diferente
+            # para evitar mostrar apenas zeros
+            if is_micro_value:
+                # Determine o número de casas decimais necessárias
+                decimal_places = 8  # Padrão para valores muito pequenos
+                
+                # Log formatado apropriadamente para valores micro
+                self.logger.info(f"{symbol} - Variação 1h: {hourly_change:.2f}% | Suporte: {support:.{decimal_places}f} | Resistência: {resistance:.{decimal_places}f}")
+            else:
+                # Log padrão para outros valores
+                self.logger.info(f"{symbol} - Variação 1h: {hourly_change:.2f}% | Suporte: {support:.2f} | Resistência: {resistance:.2f}")
             
             return {
                 'support': support,
                 'resistance': resistance,
                 'current_price': current_price,
                 'short_ma': short_ma,
-                'hourly_change': hourly_change
+                'hourly_change': hourly_change,
+                'is_micro_value': is_micro_value  # Adicionamos esta flag para uso em outros métodos
             }
             
         except Exception as e:
@@ -140,10 +154,22 @@ class ScalpingStrategy(TradingStrategy):
         current = price_data['current_price']
         support = price_data['support']
         
+        # Tratamento especial para valores muito pequenos para evitar erros de precisão
+        if current < 0.0000001 or support < 0.0000001:  # Valor muito próximo de zero
+            self.logger.warning(f"Valores muito próximos de zero detectados: current={current}, support={support}")
+            return False
+        
+        # Se estivermos lidando com valores muito pequenos, usamos um threshold ajustado
+        adjusted_threshold = threshold
+        if 'is_micro_value' in price_data and price_data['is_micro_value']:
+            # Para micro-valores, podemos precisar de um threshold mais sensível
+            # porque mesmo pequenas flutuações absolutas podem representar grandes variações %
+            self.logger.debug(f"Usando threshold ajustado para micro-valor: {adjusted_threshold}")
+        
         percent_to_support = (current - support) / current
         
         # Está próximo do suporte se a diferença for menor que o threshold
-        return percent_to_support <= threshold and percent_to_support >= 0
+        return percent_to_support <= adjusted_threshold and percent_to_support >= 0
     
     def analyze_market(self, symbol, notifier=None):
         """Analisa o mercado usando estratégia de scalping
@@ -232,8 +258,21 @@ class ScalpingStrategy(TradingStrategy):
             available_for_purchase = position_value * (1 - fee_cost)
             quantity = available_for_purchase / price
             
+            # Ajusta a precisão da quantidade com base no preço da moeda
+            # Moedas de micro-valor precisam de mais casas decimais
+            if price < 0.000001:  # Valores extremamente pequenos (ex: SHIB)
+                quantity = round(quantity, 0)  # Sem casas decimais para valores muito pequenos
+            elif price < 0.001:   # Valores muito pequenos
+                quantity = round(quantity, 0)  # Geralmente sem casas decimais
+            elif price < 0.01:    # Valores pequenos
+                quantity = round(quantity, 2)  # 2 casas decimais
+            elif price < 1:       # Valores médios
+                quantity = round(quantity, 4)  # 4 casas decimais
+            else:                 # Valores altos
+                quantity = round(quantity, 6)  # 6 casas decimais padrão
+            
             # Executa ordem de compra
-            self.logger.info(f"Comprando {quantity:.8f} de {symbol} a {price:.2f}")
+            self.logger.info(f"Comprando {quantity:.8f} de {symbol} a {price:.8f}")
             self.logger.info(f"Valor: R${position_value:.2f} | Capital: R${capital:.2f} | Taxas: R${position_value * fee_cost:.2f}")
             
             # Formata o símbolo para a API
