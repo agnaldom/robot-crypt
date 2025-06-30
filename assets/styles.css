@@ -1,0 +1,92 @@
+/* Estilos para o dashboard do Robot-Crypt */
+
+body {
+  margin: 0;
+  font-family: 'Roboto', 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #0e1726;
+  color: #e0e0e0;
+}
+
+.rc-card {
+  background-color: #1a273e;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border: 1px solid #2c3958;
+  transition: all 0.3s ease;
+}
+
+.rc-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.rc-header {
+  background-color: #131f39;
+  padding: 15px;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid #2c3958;
+}
+
+.rc-content {
+  padding: 15px;
+}
+
+.rc-profit {
+  color: #26a69a;
+}
+
+.rc-loss {
+  color: #ef5350;
+}
+
+.rc-neutral {
+  color: #9e9e9e;
+}
+
+.rc-status-active {
+  background-color: #66BB6A;
+  color: #000;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.rc-status-inactive {
+  background-color: #EF5350;
+  color: #000;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.rc-status-unknown {
+  background-color: #FFB74D;
+  color: #000;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+  .rc-responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .rc-card {
+    margin-bottom: 15px;
+  }
+}
+
+/* Tooltip customizado */
+.dash-tooltip {
+  background-color: #131f39 !important;
+  border: 1px solid #2c3958 !important;
+  color: #e0e0e0 !important;
+  font-family: 'Roboto', sans-serif;
+  border-radius: 4px;
+  padding: 8px 12px;
+  max-width: 300px;
+}

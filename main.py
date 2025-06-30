@@ -5,11 +5,13 @@ Estratégia de baixo risco e progressão sustentável
 """
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import json
 import requests
 import signal
 import sys
 import os
+import threading
 from datetime import datetime, timedelta
 from binance_api import BinanceAPI
 from strategy import ScalpingStrategy, SwingTradingStrategy
@@ -19,11 +21,76 @@ from telegram_notifier import TelegramNotifier
 from db_manager import DBManager
 from pathlib import Path
 
+# Importação dos novos módulos
+from external_data_analyzer import ExternalDataAnalyzer
+from adaptive_risk_manager import AdaptiveRiskManager
+from dashboard import RobotCryptDashboard
+
+# Configure logging
+def setup_logging(log_level=logging.INFO):
+    """Configura o sistema de logging"""
+    log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+    os.makedirs(log_dir, exist_ok=True)
+    
+    log_file = os.path.join(log_dir, f'robot-crypt-{datetime.now().strftime("%Y%m%d")}.log')
+    
+    # Configura o handler de arquivo
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=10*1024*1024, backupCount=5
+    )
+    
+    # Configura o handler de console
+    console_handler = logging.StreamHandler(sys.stdout)
+    
+    # Formata as mensagens de log
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # Configura o logger raiz
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+    root_logger.addHandler(file_handler)
+    root_logger.addHandler(console_handler)
+    
+    return root_logger
+
+# Inicializa componentes
+def init_components():
+    """Inicializa os componentes do robô"""
+    components = {}
+    
+    # Inicializa o analisador contextual
+    from contextual_analysis import NewsApiClient, NewsAnalyzer
+    news_client = NewsApiClient()
+    components['news_analyzer'] = NewsAnalyzer(news_client)
+    
+    # Inicializa o gerenciador de risco adaptativo
+    from adaptive_risk import AdaptiveRiskManager
+    components['risk_manager'] = AdaptiveRiskManager()
+    
+    return components
+
+# Inicia o dashboard em uma thread separada
+def start_dashboard():
+    """Inicia o dashboard em uma thread separada"""
+    from dashboard.app import app
+    
+    def run_dashboard():
+        app.run_server(debug=False, host='0.0.0.0', port=8050)
+    
+    dashboard_thread = threading.Thread(target=run_dashboard)
+    dashboard_thread.daemon = True
+    dashboard_thread.start()
+    
+    return dashboard_thread
+
 # Configuração de logging
 logger = setup_logger()
 
 # Variáveis globais para controle de sinal
 SHOULD_EXIT = False
+DASHBOARD_INSTANCE = None  # Para armazenar a instância do dashboard
 
 # Função para tratamento de sinais
 def signal_handler(sig, frame):
@@ -40,7 +107,7 @@ def initialize_resources():
     logger.info("Iniciando inicialização do Robot-Crypt")
     
     # Verifica e cria diretórios necessários
-    for directory in ['data', 'logs', 'reports']:
+    for directory in ['data', 'logs', 'reports', 'assets']:
         dir_path = Path(__file__).parent / directory
         if not dir_path.exists():
             dir_path.mkdir(exist_ok=True, parents=True)
@@ -57,6 +124,44 @@ def initialize_resources():
     # Inicializa banco de dados SQLite
     db = DBManager()
     logger.info("Banco de dados SQLite inicializado com sucesso")
+    
+    # Inicializa analisador de dados externos
+    try:
+        external_data = ExternalDataAnalyzer(config)
+        logger.info("Analisador de dados externos inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar analisador de dados externos: {str(e)}")
+        external_data = None
+    
+    # Inicializa gerenciador de risco adaptativo
+    try:
+        risk_manager = AdaptiveRiskManager(db, config)
+        logger.info("Gerenciador de risco adaptativo inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar gerenciador de risco adaptativo: {str(e)}")
+        risk_manager = None
+    
+    # Inicializa dashboard se as dependências estiverem disponíveis
+    global DASHBOARD_INSTANCE
+    try:
+        dashboard_port = int(os.environ.get("DASHBOARD_PORT", "8050"))
+        dashboard = RobotCryptDashboard(db, config, port=dashboard_port, external_data=external_data)
+        
+        # Verifica se o dashboard está realmente disponível (para a classe substituta)
+        if hasattr(dashboard, 'available') and dashboard.available is False:
+            logger.warning("Dashboard não disponível devido à falta de dependências.")
+            DASHBOARD_INSTANCE = None
+        else:
+            dashboard.start()
+            DASHBOARD_INSTANCE = dashboard
+            logger.info(f"Dashboard inicializado com sucesso na porta {dashboard_port}")
+    except ImportError as e:
+        logger.error(f"Erro ao importar módulos necessários para o dashboard: {str(e)}")
+        logger.warning("Para habilitar o dashboard, instale as dependências com: pip install dash plotly")
+        DASHBOARD_INSTANCE = None
+    except Exception as e:
+        logger.error(f"Erro ao inicializar dashboard: {str(e)}")
+        DASHBOARD_INSTANCE = None
     
     # Inicializa notificador Telegram, se configurado
     notifier = None
