@@ -91,6 +91,19 @@ restart_on_failure() {
     tee -a "$log_file" < "$FIFO_PATH" &
     TEE_PID=$!
     
+    # Verifica se temos uma chave de API para news
+    if [ -z "$NEWS_API_KEY" ]; then
+      echo "$(date '+%Y-%m-%d %H:%M:%S') - AVISO: NEWS_API_KEY não está definida. A análise contextual pode não funcionar corretamente." | tee -a "$log_file"
+    fi
+
+    # Verifica variáveis para o dashboard
+    if [ -z "$DASHBOARD_PORT" ]; then
+      export DASHBOARD_PORT=8050
+      echo "$(date '+%Y-%m-%d %H:%M:%S') - DASHBOARD_PORT não especificada. Usando porta padrão: 8050" | tee -a "$log_file"
+    fi
+    
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Configuração do dashboard na porta $DASHBOARD_PORT" | tee -a "$log_file"
+    
     # Executa o script Python com saída para o FIFO
     # Para resolver o problema com PID, executamos Python diretamente
     echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando processo Python..." | tee -a "$log_file"
