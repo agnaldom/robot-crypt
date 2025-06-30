@@ -30,6 +30,10 @@ RUN chmod +x /app/railway_entrypoint.sh
 ENV PYTHONUNBUFFERED=1
 ENV TZ=America/Sao_Paulo
 ENV PYTHONIOENCODING=utf-8
+ENV DASHBOARD_PORT=8050
+
+# Expõe a porta do dashboard
+EXPOSE 8050
 
 # Torna o script de healthcheck executável
 RUN chmod +x /app/healthcheck.sh

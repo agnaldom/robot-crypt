@@ -1,0 +1,167 @@
+/* Estilos gerais */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f7f9fc;
+    color: #333;
+}
+
+.dashboard-title {
+    margin: 0;
+    padding: 15px 0;
+    font-size: 24px;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.header {
+    background-color: white;
+    padding: 10px 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.update-info {
+    font-size: 14px;
+    color: #7f8c8d;
+}
+
+.update-time {
+    font-weight: 500;
+}
+
+/* Cards de métricas */
+.metrics-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin: 0 20px 20px 20px;
+}
+
+.metric-card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 15px;
+    flex: 1;
+    min-width: 200px;
+    margin: 0 10px 10px 0;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.metric-card h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #7f8c8d;
+    font-weight: normal;
+}
+
+.metric-card h2 {
+    margin: 0 0 5px 0;
+    font-size: 24px;
+    font-weight: 500;
+}
+
+.metric-card p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Estilos para gráficos */
+.charts-row {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0 20px 20px 20px;
+}
+
+.chart-container {
+    background-color: white;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-right: 10px;
+    margin-bottom: 10px;
+    flex: 1;
+    min-width: 45%;
+}
+
+.chart-container h3 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    color: #2c3e50;
+    font-weight: 500;
+}
+
+/* Seletores de rádio */
+.radio-items {
+    display: flex;
+    margin-top: 10px;
+    background: #f7f9fc;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+.radio-items label {
+    margin-right: 15px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+/* Alertas de notícias */
+.alerts-container {
+    margin-top: 15px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.alert-box {
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border-left: 4px solid #3498db;
+}
+
+.alert-box h4 {
+    margin: 0 0 5px 0;
+    font-size: 16px;
+}
+
+.alert-box p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.alert-crítico {
+    background-color: #fdeded;
+    border-left-color: #e74c3c;
+}
+
+.alert-alto {
+    background-color: #fff5eb;
+    border-left-color: #e67e22;
+}
+
+.alert-médio {
+    background-color: #ebf5fb;
+    border-left-color: #3498db;
+}
+
+.alert-baixo {
+    background-color: #eafaf1;
+    border-left-color: #2ecc71;
+}
+
+/* Responsividade */
+@media (max-width: 768px) {
+    .metrics-row, .charts-row {
+        flex-direction: column;
+    }
+    
+    .metric-card, .chart-container {
+        min-width: 100%;
+        margin-right: 0;
+    }
+}

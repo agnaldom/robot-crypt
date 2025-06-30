@@ -11,6 +11,9 @@ services:
     restart: unless-stopped
     environment:
       - TZ=America/Sao_Paulo
+      - DASHBOARD_PORT=8050
+    ports:
+      - "8050:8050"  # Expõe a porta do dashboard
     command: python main.py
     
   # Serviço opcional para visualização de logs
