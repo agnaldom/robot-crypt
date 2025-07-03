@@ -50,6 +50,14 @@ def main():
             logger.error("Dashboard não está disponível devido a dependências faltantes")
             return False
         
+        # Configurar o servidor com o contexto de aplicação
+        if hasattr(dashboard, 'app') and hasattr(dashboard.app, 'server'):
+            # Em Flask 2.0+, before_first_request foi removido
+            # Precisamos executar a configuração do servidor em um contexto de aplicação
+            with dashboard.app.server.app_context():
+                if hasattr(dashboard, '_setup_server'):
+                    dashboard._setup_server()
+        
         # Inicia o dashboard (bloqueante)
         # Não usa threads porque queremos que este script mantenha o dashboard rodando
         logger.info("Iniciando servidor dashboard...")

@@ -1,31 +1,51 @@
 #!/bin/bash
 # Entrypoint script for Railway deployment
+# Version: 2.0
 
-echo "Starting Robot-Crypt deployment on Railway..."
+# Function to log messages with timestamp and category
+log() {
+    local level="$1"
+    local message="$2"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [${level}] - ${message}" | tee -a "$LOG_FILE"
+}
+
+# Set up initial variables
+LOG_FILE="/app/logs/robot-crypt-$(date '+%Y%m%d').log"
+SHOULD_EXIT=0
+PYTHON_PID=""
+DASHBOARD_PID=""
+MAX_RESTARTS=5
+RESTART_COUNT=0
+RESTART_DELAY=30
+HEALTH_CHECK_INTERVAL=30
+MAX_MEMORY_PERCENT=85  # Maximum memory usage percentage before forcing restart
+
+log "INFO" "Starting Robot-Crypt deployment on Railway..."
+log "INFO" "Script Version: 2.0"
 
 # Validate environment variables
-echo "Validating environment variables..."
+log "INFO" "Validating environment variables..."
 
 # Check for API keys
 if [ -z "$BINANCE_API_KEY" ]; then
-  echo "ERROR: BINANCE_API_KEY is not set!"
+  log "ERROR" "BINANCE_API_KEY is not set!"
   exit 1
 fi
 
 if [ -z "$BINANCE_API_SECRET" ]; then
-  echo "ERROR: BINANCE_API_SECRET is not set!"
+  log "ERROR" "BINANCE_API_SECRET is not set!"
   exit 1
 fi
 
 # Check for Telegram configuration if enabled
 if [ "$NOTIFICATIONS_ENABLED" = "true" ] || [ "$NOTIFICATIONS_ENABLED" = "1" ]; then
   if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
-    echo "ERROR: NOTIFICATIONS_ENABLED is set to true but TELEGRAM_BOT_TOKEN is missing!"
+    log "ERROR" "NOTIFICATIONS_ENABLED is set to true but TELEGRAM_BOT_TOKEN is missing!"
     exit 1
   fi
   
   if [ -z "$TELEGRAM_CHAT_ID" ]; then
-    echo "ERROR: NOTIFICATIONS_ENABLED is set to true but TELEGRAM_CHAT_ID is missing!"
+    log "ERROR" "NOTIFICATIONS_ENABLED is set to true but TELEGRAM_CHAT_ID is missing!"
     exit 1
   fi
 fi
@@ -38,182 +58,287 @@ mkdir -p /app/reports
 # Set permissions
 chmod -R 777 /app/logs /app/data /app/reports
 
-echo "Environment validated. Starting Robot-Crypt..."
+log "INFO" "Environment validated. Setting up Robot-Crypt..."
 
-# Variáveis globais
-SHOULD_EXIT=0
-PYTHON_PID=""
+# Check for NEWS API key
+if [ -z "$NEWS_API_KEY" ]; then
+  log "WARNING" "NEWS_API_KEY not set. Contextual analysis may not work correctly."
+fi
+
+# Verify dashboard port configuration
+if [ -z "$DASHBOARD_PORT" ]; then
+  export DASHBOARD_PORT=8050
+  log "INFO" "DASHBOARD_PORT not specified. Using default port: 8050"
+fi
 
 # Função para tratamento de sinais
 handle_signal() {
   local signal=$1
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Recebido sinal $signal. Preparando encerramento gracioso..."
+  log "INFO" "Received signal $signal. Preparing graceful shutdown..."
   
-  # Marcar flag de saída, mas não encerrar o script imediatamente
+  # Set exit flag but don't terminate script immediately
   SHOULD_EXIT=1
   
-  # Se o processo Python está em execução, envie o sinal para ele
+  # Send signal to Python process if running
   if [ ! -z "$PYTHON_PID" ] && kill -0 "$PYTHON_PID" 2>/dev/null; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Enviando $signal para o processo Python (PID $PYTHON_PID)"
+    log "INFO" "Sending $signal to Python process (PID $PYTHON_PID)"
     kill -$signal "$PYTHON_PID" 2>/dev/null
+  fi
+  
+  # Send signal to Dashboard process if running
+  if [ ! -z "$DASHBOARD_PID" ] && kill -0 "$DASHBOARD_PID" 2>/dev/null; then
+    log "INFO" "Sending $signal to Dashboard process (PID $DASHBOARD_PID)"
+    kill -$signal "$DASHBOARD_PID" 2>/dev/null
   fi
 }
 
-# Registrando handlers para diversos sinais
+# Register signal handlers
 trap 'handle_signal TERM' SIGTERM
 trap 'handle_signal INT' SIGINT
 trap 'handle_signal HUP' SIGHUP
 
-# Função para reiniciar o script Python em caso de falha
-restart_on_failure() {
-  local max_retries=3
-  local retry_count=0
-  local retry_delay=30
-  local exit_code=0
-  local log_file="/app/logs/robot-crypt-$(date '+%Y%m%d').log"
+# Health check function to monitor the main Python process
+check_health() {
+  local pid=$1
+  local name=$2
   
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Inicializando Robot-Crypt com reinício automático" | tee -a "$log_file"
+  # Check if process is running
+  if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+    log "WARNING" "$name process (PID $pid) is not running!"
+    return 1
+  fi
   
-  # Cria o arquivo de log se não existir
-  touch "$log_file"
-  
-  # Loop principal de execução
-  while [ $SHOULD_EXIT -eq 0 ]; do
-    # Registrar início da execução
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando execução do Python (tentativa $((retry_count + 1)))" | tee -a "$log_file"
+  # Check CPU and memory usage
+  if command -v ps >/dev/null 2>&1; then
+    local mem_usage=$(ps -p $pid -o %mem= 2>/dev/null || echo "0")
+    local cpu_usage=$(ps -p $pid -o %cpu= 2>/dev/null || echo "0")
     
-    # Cria um FIFO temporário para comunicação entre processos
-    FIFO_PATH="/tmp/python_fifo_$$"
-    rm -f "$FIFO_PATH"
-    mkfifo "$FIFO_PATH"
+    mem_usage=$(echo $mem_usage | tr -d ' ')
+    cpu_usage=$(echo $cpu_usage | tr -d ' ')
     
-    # Inicia tee em background para capturar logs
-    tee -a "$log_file" < "$FIFO_PATH" &
-    TEE_PID=$!
+    log "DEBUG" "$name resource usage - Memory: ${mem_usage}%, CPU: ${cpu_usage}%"
     
-    # Verifica se temos uma chave de API para news
-    if [ -z "$NEWS_API_KEY" ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - AVISO: NEWS_API_KEY não está definida. A análise contextual pode não funcionar corretamente." | tee -a "$log_file"
+    # Check if memory usage exceeds threshold
+    if (( $(echo "$mem_usage > $MAX_MEMORY_PERCENT" | bc -l) )); then
+      log "WARNING" "High memory usage detected (${mem_usage}%)! Recommending restart."
+      return 2
     fi
+  fi
+  
+  return 0
+}
 
-    # Verifica variáveis para o dashboard
-    if [ -z "$DASHBOARD_PORT" ]; then
-      export DASHBOARD_PORT=8050
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - DASHBOARD_PORT não especificada. Usando porta padrão: 8050" | tee -a "$log_file"
+# Start dashboard function
+start_dashboard() {
+  log "INFO" "Starting dashboard on port $DASHBOARD_PORT"
+  
+  # Create a FIFO for dashboard logs
+  DASHBOARD_FIFO="/tmp/dashboard_fifo_$$"
+  rm -f "$DASHBOARD_FIFO"
+  mkfifo "$DASHBOARD_FIFO"
+  
+  # Start tee in background to capture logs
+  tee -a "$LOG_FILE" < "$DASHBOARD_FIFO" &
+  DASHBOARD_TEE_PID=$!
+  
+  # Start the dashboard in background with its own log capture
+  python dashboard.py > "$DASHBOARD_FIFO" 2>&1 &
+  DASHBOARD_PID=$!
+  
+  log "INFO" "Dashboard started with PID $DASHBOARD_PID"
+  
+  # Wait a moment to ensure it starts properly
+  sleep 3
+  
+  # Verify dashboard started correctly
+  if ! kill -0 "$DASHBOARD_PID" 2>/dev/null; then
+    log "ERROR" "Dashboard failed to start properly!"
+    kill $DASHBOARD_TEE_PID 2>/dev/null || true
+    rm -f "$DASHBOARD_FIFO" 2>/dev/null || true
+    DASHBOARD_PID=""
+    return 1
+  fi
+  
+  return 0
+}
+
+# Main function to manage the application
+main_loop() {
+  log "INFO" "Initializing Robot-Crypt with automatic restart capability"
+  
+  # Start the dashboard first
+  start_dashboard
+  
+  # Reset restart counter when successfully running for a while
+  local stable_time=0
+  
+  while [ $SHOULD_EXIT -eq 0 ]; do
+    # Check if we've exceeded max restarts
+    if [ $RESTART_COUNT -ge $MAX_RESTARTS ]; then
+      log "ERROR" "Maximum restart limit ($MAX_RESTARTS) reached. Waiting 15 minutes before trying again."
+      RESTART_COUNT=0
+      sleep 900  # 15 minutes
     fi
     
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Configuração do dashboard na porta $DASHBOARD_PORT" | tee -a "$log_file"
+    log "INFO" "Starting main Python application (attempt $((RESTART_COUNT + 1)))"
     
-    # Executa o script Python com saída para o FIFO
-    # Para resolver o problema com PID, executamos Python diretamente
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Iniciando processo Python..." | tee -a "$log_file"
-    python main.py > "$FIFO_PATH" 2>&1 &
+    # Create a FIFO for Python process logs
+    PYTHON_FIFO="/tmp/python_fifo_$$"
+    rm -f "$PYTHON_FIFO"
+    mkfifo "$PYTHON_FIFO"
+    
+    # Start tee in background to capture logs
+    tee -a "$LOG_FILE" < "$PYTHON_FIFO" &
+    PYTHON_TEE_PID=$!
+    
+    # Start the main Python application
+    log "INFO" "Starting Python process..."
+    python main.py > "$PYTHON_FIFO" 2>&1 &
     PYTHON_PID=$!
     
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Processo Python iniciado com PID $PYTHON_PID" | tee -a "$log_file"
+    log "INFO" "Python process started with PID $PYTHON_PID"
     
-    # Aguarda o término do processo em background
-    wait $PYTHON_PID || true
-    exit_code=$?
+    # Health check loop
+    local run_time=0
+    local exit_code=0
+    local healthy_time=0
     
-    # Limpar recursos
-    kill $TEE_PID 2>/dev/null || true
-    rm -f "$FIFO_PATH" 2>/dev/null || true
+    while [ $SHOULD_EXIT -eq 0 ]; do
+      # Perform health check on main process
+      check_health "$PYTHON_PID" "Python"
+      local health_status=$?
+      
+      # If process is healthy, increase healthy time counter
+      if [ $health_status -eq 0 ]; then
+        healthy_time=$((healthy_time + HEALTH_CHECK_INTERVAL))
+      fi
+      
+      # If process has been healthy for a while, reset restart counter
+      if [ $healthy_time -ge 300 ]; then  # 5 minutes of stable operation
+        if [ $RESTART_COUNT -gt 0 ]; then
+          log "INFO" "Application stable for 5 minutes, resetting restart counter"
+          RESTART_COUNT=0
+          healthy_time=0
+        fi
+      fi
+      
+      # Check for dashboard health
+      if [ ! -z "$DASHBOARD_PID" ]; then
+        check_health "$DASHBOARD_PID" "Dashboard"
+        local dashboard_health=$?
+        
+        # If dashboard died, try to restart it
+        if [ $dashboard_health -ne 0 ]; then
+          log "WARNING" "Dashboard not running, attempting to restart..."
+          start_dashboard
+        fi
+      fi
+      
+      # Critical health issue - needs restart
+      if [ $health_status -eq 2 ]; then
+        log "WARNING" "Critical health issue detected. Restarting application..."
+        if [ ! -z "$PYTHON_PID" ] && kill -0 "$PYTHON_PID" 2>/dev/null; then
+          kill -TERM "$PYTHON_PID" 2>/dev/null
+          sleep 5
+          # Force kill if still running
+          kill -9 "$PYTHON_PID" 2>/dev/null || true
+        fi
+        break
+      fi
+      
+      # Process died
+      if [ $health_status -eq 1 ]; then
+        log "WARNING" "Python process no longer running"
+        # Get exit code if possible
+        wait "$PYTHON_PID" 2>/dev/null || true
+        exit_code=$?
+        log "INFO" "Python process exited with code: $exit_code"
+        break
+      fi
+      
+      # Increment run time counter
+      run_time=$((run_time + HEALTH_CHECK_INTERVAL))
+      
+      # Sleep for health check interval
+      local waited=0
+      while [ $waited -lt $HEALTH_CHECK_INTERVAL ] && [ $SHOULD_EXIT -eq 0 ]; do
+        sleep 1
+        waited=$((waited + 1))
+      done
+      
+      # Check if exit was requested
+      if [ $SHOULD_EXIT -eq 1 ]; then
+        log "INFO" "Shutdown requested during health check. Exiting..."
+        break
+      fi
+    done
     
-    # Verifica se a flag de saída foi definida
+    # Clean up Python process resources
+    kill $PYTHON_TEE_PID 2>/dev/null || true
+    rm -f "$PYTHON_FIFO" 2>/dev/null || true
+    
+    # If exit requested, break out of restart loop
     if [ $SHOULD_EXIT -eq 1 ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - Interrupção solicitada. Encerrando o script." | tee -a "$log_file"
+      log "INFO" "Shutdown requested. Stopping all processes..."
       break
     fi
     
-    # Registra a finalização no log
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Script Python encerrou com código: $exit_code" | tee -a "$log_file"
-    
-    # Se foi encerrado com sucesso, não reinicia
-    if [ $exit_code -eq 0 ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - Finalização normal. Não será reiniciado." | tee -a "$log_file"
+    # Normal exit (code 0) or signal-triggered exit - don't restart
+    if [ $exit_code -eq 0 ] || [ $exit_code -eq 143 ] || [ $exit_code -eq 130 ] || [ $exit_code -eq 129 ]; then
+      log "INFO" "Normal termination (code $exit_code). Not restarting."
       break
     fi
     
-    # Se foi encerrado com sinal de término (SIGTERM=143, SIGINT=130, SIGHUP=129), não reinicia
-    if [ $exit_code -eq 143 ] || [ $exit_code -eq 130 ] || [ $exit_code -eq 129 ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - Finalização por sinal ($exit_code). Não será reiniciado." | tee -a "$log_file"
-      break
+    # Increment restart counter and add exponential backoff delay
+    RESTART_COUNT=$((RESTART_COUNT + 1))
+    local current_delay=$((RESTART_DELAY * RESTART_COUNT))
+    
+    # Cap the delay at 5 minutes
+    if [ $current_delay -gt 300 ]; then
+      current_delay=300
     fi
     
-    # Verifica se atingiu o limite de tentativas
-    retry_count=$((retry_count + 1))
-    if [ $retry_count -ge $max_retries ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - Máximo de $max_retries tentativas atingido. Não será reiniciado." | tee -a "$log_file"
-      break
-    fi
+    log "INFO" "Restarting in $current_delay seconds... (attempt $RESTART_COUNT of $MAX_RESTARTS)"
     
-    # Espera antes de reiniciar
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Reiniciando em $retry_delay segundos... (tentativa $retry_count de $max_retries)" | tee -a "$log_file"
-    
-    # Loop de espera que verifica periodicamente se devemos sair
+    # Wait with periodic checks for exit signal
     local waited=0
-    while [ $waited -lt $retry_delay ] && [ $SHOULD_EXIT -eq 0 ]; do
+    while [ $waited -lt $current_delay ] && [ $SHOULD_EXIT -eq 0 ]; do
       sleep 1
       waited=$((waited + 1))
     done
     
-    # Se foi solicitada a saída durante a espera, sai do loop principal
+    # If exit requested during wait, break
     if [ $SHOULD_EXIT -eq 1 ]; then
-      echo "$(date '+%Y-%m-%d %H:%M:%S') - Interrupção solicitada durante espera. Encerrando o script." | tee -a "$log_file"
+      log "INFO" "Shutdown requested during restart delay. Exiting..."
       break
     fi
   done
   
-  # Mantém o container em execução para depuração e para evitar restarts
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Script principal encerrado. Mantendo container ativo para depuração." | tee -a "$log_file"
-  echo "Para encerrar o container manualmente, use 'docker stop' ou pressione Ctrl+C se estiver em modo interativo." | tee -a "$log_file"
-  echo "Você pode acessar os logs em /app/logs/ para investigar qualquer problema." | tee -a "$log_file"
+  # Clean up dashboard process if running
+  if [ ! -z "$DASHBOARD_PID" ] && kill -0 "$DASHBOARD_PID" 2>/dev/null; then
+    log "INFO" "Stopping dashboard process..."
+    kill -TERM "$DASHBOARD_PID" 2>/dev/null
+    sleep 2
+    kill -9 "$DASHBOARD_PID" 2>/dev/null || true
+  fi
   
-  # Ao invés de tail -f, usamos um loop que pode ser interrompido com sinais
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Container continua em execução. Pressione Ctrl+C para encerrar." | tee -a "$log_file"
+  # Clean up dashboard resources
+  if [ ! -z "$DASHBOARD_TEE_PID" ]; then
+    kill $DASHBOARD_TEE_PID 2>/dev/null || true
+    rm -f "$DASHBOARD_FIFO" 2>/dev/null || true
+  fi
   
-  # Loop que mantém o container em execução mas pode ser interrompido facilmente
-  # Define um contador para tentar reiniciar automaticamente se nenhum erro crítico
-  local auto_restart_timer=0
-  local auto_restart_interval=3600  # 1 hora em segundos
-  
-  while [ $SHOULD_EXIT -eq 0 ]; do
-    # Verifica se deve tentar reiniciar automaticamente após um tempo
-    if [ $exit_code -eq 0 ] || [ $exit_code -eq 143 ] || [ $exit_code -eq 130 ] || [ $exit_code -eq 129 ]; then
-      # Códigos normais de saída - não reinicia automaticamente
-      auto_restart_timer=0
-    else
-      # Em caso de erro, incrementa o contador para eventual reinício automático
-      auto_restart_timer=$((auto_restart_timer + 10))
-      
-      # Verifica se está na hora de tentar reiniciar
-      if [ $auto_restart_timer -ge $auto_restart_interval ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - Tentando reinício automático após $auto_restart_interval segundos..." | tee -a "$log_file"
-        # Sai deste loop para retornar ao loop principal de execução
-        break
-      fi
-    fi
-    
-    # Aguarda um pouco
-    sleep 10
-  done
-  
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Encerrando container graciosamente." | tee -a "$log_file"
+  log "INFO" "All processes terminated. Container will exit shortly."
 }
 
-# Configuração adicional para melhor log de erros
+# Set up additional error handling
 set -o pipefail
 
-# Configuração de timezone no log
+# Set timezone for logs
 export TZ="America/Sao_Paulo"
 
-# Registra início do container
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Container Robot-Crypt iniciado. Versão do script: 1.1"
+# Run the main application loop
+main_loop
 
-# Inicia o script com mecanismo de reinício
-restart_on_failure
-
-# Esta linha só é executada quando o script for realmente encerrado
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Container Robot-Crypt encerrado."
+log "INFO" "Container Robot-Crypt shutdown complete."
 exit 0

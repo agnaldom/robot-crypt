@@ -13,12 +13,14 @@ import sys
 import os
 import threading
 from datetime import datetime, timedelta
+from health_monitor import check_system_health, log_process_tree
 from binance_api import BinanceAPI
 from strategy import ScalpingStrategy, SwingTradingStrategy
 from config import Config
 from utils import setup_logger, save_state, load_state, filtrar_pares_por_liquidez
 from telegram_notifier import TelegramNotifier
 from db_manager import DBManager
+from postgres_manager import PostgresManager
 from pathlib import Path
 
 # Importação dos novos módulos
@@ -102,6 +104,18 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
+def check_postgres_requirements():
+    """Verifica se os requisitos para o PostgreSQL estão disponíveis"""
+    try:
+        import psycopg2
+        from psycopg2.extras import Json
+        logger.info("Requisitos para PostgreSQL estão disponíveis")
+        return True
+    except ImportError:
+        logger.warning("Pacote psycopg2 não encontrado. Algumas funcionalidades de banco de dados não estarão disponíveis.")
+        logger.info("Para habilitar armazenamento PostgreSQL, instale: pip install psycopg2-binary")
+        return False
+
 def initialize_resources():
     """Inicializa recursos básicos do sistema"""
     logger.info("Iniciando inicialização do Robot-Crypt")
@@ -113,6 +127,9 @@ def initialize_resources():
             dir_path.mkdir(exist_ok=True, parents=True)
             logger.info(f"Diretório {directory} criado com sucesso")
     
+    # Verifica requisitos para PostgreSQL
+    postgres_available = check_postgres_requirements()
+    
     # Carrega configuração
     config = Config()
     
@@ -121,9 +138,18 @@ def initialize_resources():
     logger.info(f"Telegram Chat ID disponível: {'Sim' if config.telegram_chat_id else 'Não'}")
     logger.info(f"Notificações Telegram habilitadas: {'Sim' if config.notifications_enabled else 'Não'}")
     
-    # Inicializa banco de dados SQLite
+    # Inicializa banco de dados SQLite (para compatibilidade com código existente)
     db = DBManager()
     logger.info("Banco de dados SQLite inicializado com sucesso")
+    
+    # Inicializa banco de dados PostgreSQL para dados avançados
+    try:
+        pg_db = PostgresManager()
+        logger.info("Banco de dados PostgreSQL inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar PostgreSQL: {str(e)}")
+        logger.warning("Continuando sem armazenamento PostgreSQL. Alguns recursos não estarão disponíveis.")
+        pg_db = None
     
     # Inicializa analisador de dados externos
     try:
@@ -133,9 +159,34 @@ def initialize_resources():
         logger.error(f"Erro ao inicializar analisador de dados externos: {str(e)}")
         external_data = None
     
-    # Inicializa gerenciador de risco adaptativo
+    # Inicializa analisador de notícias (para análise contextual)
     try:
-        risk_manager = AdaptiveRiskManager(db, config)
+        from contextual_analysis.news_analyzer import NewsAnalyzer
+        from contextual_analysis.news_api_client import NewsApiClient
+        news_client = NewsApiClient()
+        news_analyzer = NewsAnalyzer(news_client)
+        logger.info("Analisador de notícias inicializado com sucesso")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar analisador de notícias: {str(e)}")
+        logger.info("Continuando sem análise de notícias")
+        news_analyzer = None
+        
+    # Inicializa analisador de contexto avançado
+    context_analyzer = None
+    try:
+        from contextual_analysis.advanced_context_analyzer import AdvancedContextAnalyzer
+        context_analyzer = AdvancedContextAnalyzer(config=config, news_analyzer=news_analyzer)
+        logger.info("Analisador de contexto avançado inicializado com sucesso")
+    except ImportError as ie:
+        logger.warning(f"Não foi possível importar AdvancedContextAnalyzer: {str(ie)}")
+        logger.info("Continuando sem análise de contexto avançada")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar analisador de contexto avançado: {str(e)}")
+        logger.info("Continuando sem análise de contexto avançada")
+    
+    # Inicializa gerenciador de risco adaptativo com análise contextual
+    try:
+        risk_manager = AdaptiveRiskManager(db, config, context_analyzer, news_analyzer)
         logger.info("Gerenciador de risco adaptativo inicializado com sucesso")
     except Exception as e:
         logger.error(f"Erro ao inicializar gerenciador de risco adaptativo: {str(e)}")
@@ -224,6 +275,50 @@ def initialize_resources():
         time.sleep(1)
     
     return config, binance, notifier, db
+
+def check_system_health():
+    """Verifica a saúde do sistema e registra informações relevantes"""
+    import psutil
+    import gc
+    
+    try:
+        # Coleta informações de memória
+        memory = psutil.virtual_memory()
+        mem_usage_percent = memory.percent
+        
+        # Coleta informações de CPU
+        cpu_percent = psutil.cpu_percent(interval=1)
+        
+        # Coleta informações de disco
+        disk = psutil.disk_usage('/')
+        disk_percent = disk.percent
+        
+        # Registra informações de saúde
+        logger.info("=== SISTEMA DE MONITORAMENTO DE SAÚDE ===")
+        logger.info(f"Uso de memória: {mem_usage_percent:.1f}%")
+        logger.info(f"Uso de CPU: {cpu_percent:.1f}%")
+        logger.info(f"Uso de disco: {disk_percent:.1f}%")
+        
+        # Verifica se há problemas graves
+        if mem_usage_percent > 90:
+            logger.warning("ALERTA DE SAÚDE: Uso de memória muito alto (>90%)!")
+        if cpu_percent > 90:
+            logger.warning("ALERTA DE SAÚDE: Uso de CPU muito alto (>90%)!")
+        if disk_percent > 90:
+            logger.warning("ALERTA DE SAÚDE: Uso de disco muito alto (>90%)!")
+            
+        # Força coleta de lixo para liberar memória
+        collected = gc.collect()
+        logger.info(f"Objetos coletados pelo garbage collector: {collected}")
+        
+        return {
+            'memory_percent': mem_usage_percent,
+            'cpu_percent': cpu_percent,
+            'disk_percent': disk_percent
+        }
+    except Exception as e:
+        logger.error(f"Erro ao verificar saúde do sistema: {str(e)}")
+        return None
 
 def main():
     """Função principal do bot"""
@@ -576,27 +671,33 @@ def main():
                     strategy = SwingTradingStrategy(config, binance)
                 
                 # Notifica via Telegram
+                if notifier:
+                    strategy_name = "Scalping" if capital < 300 else "Swing Trading"
+                    notifier.notify_status(f"⚙️ Inicializando estratégia de {strategy_name}")
+            
+            # Analisa cada par configurado
+            # Primeiro verifica e remove pares problemáticos conhecidos
+            problematic_pairs = ["ETH/BNB"]
+            for prob_pair in problematic_pairs:
+                if prob_pair in pairs:
+                    logger.warning(f"Removendo par problemático conhecido: {prob_pair}")
+                    pairs.remove(prob_pair)
+                    # Notifica via Telegram
                     if notifier:
-                        strategy_name = "Scalping" if capital < 300 else "Swing Trading"
-                        notifier.notify_status(f"⚙️ Inicializando estratégia de {strategy_name}")
-                
-                # Analisa cada par configurado
-                # Primeiro verifica e remove pares problemáticos conhecidos
-                problematic_pairs = ["ETH/BNB"]
-                for prob_pair in problematic_pairs:
-                    if prob_pair in pairs:
-                        logger.warning(f"Removendo par problemático conhecido: {prob_pair}")
-                        pairs.remove(prob_pair)
-                        # Notifica via Telegram
-                        if notifier:
-                            notifier.notify_status(f"⚠️ Par {prob_pair} é conhecido por causar problemas e foi removido da lista")
+                        notifier.notify_status(f"⚠️ Par {prob_pair} é conhecido por causar problemas e foi removido da lista")
 
-                for pair in pairs[:]:  # Cria uma cópia para poder modificar a lista durante o loop
-                    logger.info(f"Analisando par {pair}")
-                    
-                    # Envia notificação que iniciou análise deste par
-                    if notifier:
-                        notifier.notify_status(f"🔎 Iniciando análise do par {pair}")
+            # Registra o horário de início da análise atual
+            analysis_start_time = datetime.now()
+            logger.info(f"==================== INICIANDO CICLO DE ANÁLISE ====================")
+            logger.info(f"Iniciando ciclo de análise de mercado às {analysis_start_time.strftime('%H:%M:%S')}")
+            logger.info(f"Número de pares a analisar: {len(pairs)}")
+            logger.info(f"Pares para análise: {', '.join(pairs)}")
+            
+            # Analisa cada par em sequência
+            pair_count = 0
+            for pair in pairs[:]:  # Cria uma cópia para poder modificar a lista durante o loop
+                pair_count += 1
+                logger.info(f"Analisando par {pair} ({pair_count}/{len(pairs)})")
                 
                 # Tenta analisar o mercado com tratamento de erros específicos
                 try:
@@ -605,8 +706,97 @@ def main():
                         logger.error(f"Estratégia não tem método 'analyze_market'. Tipo: {type(strategy)}")
                         continue
                     
+                    # Registra início da análise deste par específico
+                    pair_analysis_start = datetime.now()
+                    
                     # Analisa mercado e executa ordens conforme a estratégia
                     should_trade, action, price = strategy.analyze_market(pair, notifier=notifier)
+                    
+                    # Registra resultado da análise
+                    pair_analysis_duration = (datetime.now() - pair_analysis_start).total_seconds()
+                    logger.info(f"Análise de {pair} concluída em {pair_analysis_duration:.2f}s - Resultado: {action if should_trade else 'sem ação'}")
+                    
+                    if should_trade:
+                        logger.info(f"Sinal de {action.upper()} detectado para {pair} a {price:.8f}")
+                        if action == "buy":
+                            success, order_info = strategy.execute_buy(pair, price)
+                            
+                            if success:
+                                logger.info(f"COMPRA de {pair} executada com sucesso: {order_info}")
+                                if notifier:
+                                    notifier.notify_trade(f"🛒 COMPRA de {pair}", f"Preço: {price:.8f}\nQuantidade: {order_info['quantity']:.8f}")
+                                
+                        elif action == "sell":
+                            success, order_info = strategy.execute_sell(pair, price)
+                            
+                            if success:
+                                logger.info(f"VENDA de {pair} executada com sucesso: {order_info}")
+                                # Atualiza estatísticas
+                                stats['total_trades'] += 1
+                                profit_percent = order_info['profit'] * 100
+                                
+                                if profit_percent > 0:
+                                    stats['winning_trades'] += 1
+                                    stats['best_trade_profit'] = max(stats['best_trade_profit'], profit_percent)
+                                else:
+                                    stats['losing_trades'] += 1
+                                    stats['worst_trade_loss'] = min(stats['worst_trade_loss'], profit_percent)
+                                    
+                                # Atualiza capital
+                                current_balance = config.get_balance(binance.get_account_info())
+                                stats['current_capital'] = current_balance
+                                stats['profit_history'].append(profit_percent)
+                                
+                                # Registra transação no PostgreSQL se disponível
+                                if pg_db:
+                                    try:
+                                        # Estrutura os dados da transação
+                                        transaction_data = {
+                                            'symbol': pair,
+                                            'operation_type': 'sell',
+                                            'entry_price': float(order_info.get('entry_price', 0)),
+                                            'exit_price': float(price),
+                                            'quantity': float(order_info.get('quantity', 0)),
+                                            'profit_loss': float(order_info.get('profit_amount', 0)),
+                                            'profit_loss_percentage': profit_percent,
+                                            'entry_time': order_info.get('entry_time', datetime.now() - timedelta(minutes=60)),
+                                            'exit_time': datetime.now(),
+                                            'strategy_used': strategy.__class__.__name__,
+                                            'strategy_type': 'Scalping' if isinstance(strategy, ScalpingStrategy) else 'Swing Trading',
+                                            'balance_before': float(order_info.get('balance_before', stats['current_capital'] - order_info.get('profit_amount', 0))),
+                                            'balance_after': float(stats['current_capital'])
+                                        }
+                                        
+                                        # Registra a transação
+                                        tx_id = pg_db.record_transaction(transaction_data)
+                                        
+                                        # Registra atualização de capital
+                                        if tx_id:
+                                            logger.info(f"Transação registrada no PostgreSQL com ID: {tx_id}")
+                                            pg_db.save_capital_update(
+                                                balance=stats['current_capital'],
+                                                change_amount=order_info.get('profit_amount', 0),
+                                                change_percentage=profit_percent,
+                                                trade_id=tx_id,
+                                                event_type='sell',
+                                                notes=f"Venda de {pair} com {profit_percent:+.2f}% de lucro/prejuízo"
+                                            )
+                                            
+                                            # Calcular métricas de performance diárias
+                                            today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+                                            yesterday = today - timedelta(days=1)
+                                            pg_db.calculate_performance_metrics('daily', yesterday, today)
+                                    except Exception as pg_error:
+                                        logger.error(f"Erro ao registrar transação no PostgreSQL: {str(pg_error)}")
+                                
+                                # Notifica via Telegram
+                                if notifier:
+                                    emoji = "🟢" if profit_percent > 0 else "🔴"
+                                    notifier.notify_trade(
+                                        f"{emoji} VENDA de {pair}", 
+                                        f"Preço: {price:.8f}\nLucro: {profit_percent:+.2f}%\nSaldo: R${stats['current_capital']:.2f}"
+                                    )
+                
                 except requests.exceptions.RequestException as e:
                     error_message = f"Erro na análise do par {pair}: {str(e)}"
                     logger.error(error_message)
@@ -639,171 +829,37 @@ def main():
                     logger.exception("Detalhes do erro:")
                     continue  # Pula para o próximo par
                 
-                if should_trade:
-                    if action == "buy":
-                        success, order_info = strategy.execute_buy(pair, price)
-                        
-                        if success and notifier:
-                            notifier.notify_trade(f"🛒 COMPRA de {pair}", f"Preço: {price:.8f}\nQuantidade: {order_info['quantity']:.8f}")
-                            
-                    elif action == "sell":
-                        success, order_info = strategy.execute_sell(pair, price)
-                        
-                        if success:
-                            # Atualiza estatísticas
-                            stats['total_trades'] += 1
-                            profit_percent = order_info['profit'] * 100
-                            
-                            if profit_percent > 0:
-                                stats['winning_trades'] += 1
-                                stats['best_trade_profit'] = max(stats['best_trade_profit'], profit_percent)
-                            else:
-                                stats['losing_trades'] += 1
-                                stats['worst_trade_loss'] = min(stats['worst_trade_loss'], profit_percent)
-                                
-                            # Atualiza capital
-                            stats['current_capital'] = config.get_balance(binance.get_account_info())
-                            stats['profit_history'].append(profit_percent)
-                            
-                            # Notifica via Telegram
-                            if notifier:
-                                emoji = "🟢" if profit_percent > 0 else "🔴"
-                                notifier.notify_trade(
-                                    f"{emoji} VENDA de {pair}", 
-                                    f"Preço: {price:.8f}\nLucro: {profit_percent:+.2f}%\nSaldo: R${stats['current_capital']:.2f}"
-                                )
-                
-                # Atualiza informações da conta para verificar saldos disponíveis
-                try:
-                    account_info = binance.get_account_info()
-                    
-                    # Atualiza o capital total
-                    try:
-                        capital = config.get_balance(account_info)
-                    except Exception as balance_error:
-                        logger.error(f"Erro ao calcular saldo: {str(balance_error)}")
-                        # Mantém o valor anterior do capital
-                        logger.warning("Mantendo valor anterior do capital devido a erro")
-                    
-                    # Verifica saldos das moedas principais
-                    bnb_balance = 0
-                    usdt_balance = 0
-                    brl_balance = 0
-                    
-                    if 'balances' in account_info:
-                        for balance in account_info.get('balances', []):
-                            try:
-                                asset = balance.get('asset', '')
-                                free_amount = float(balance.get('free', '0'))
-                                locked_amount = float(balance.get('locked', '0'))
-                                total_amount = free_amount + locked_amount
-                                
-                                if asset == 'BNB' and total_amount > 0:
-                                    bnb_balance = total_amount
-                                elif asset == 'USDT' and total_amount > 0:
-                                    usdt_balance = total_amount
-                                elif asset == 'BRL' and total_amount > 0:
-                                    brl_balance = total_amount
-                            except Exception as balance_parse_error:
-                                logger.error(f"Erro ao processar saldo da moeda {balance.get('asset', 'desconhecida')}: {str(balance_parse_error)}")
-                    
-                    logger.info(f"Saldos atualizados - BNB: {bnb_balance:.8f}, USDT: {usdt_balance:.2f}, BRL: {brl_balance:.2f}")
-                except Exception as account_error:
-                    logger.error(f"Erro ao atualizar informações da conta: {str(account_error)}")
-                    logger.warning("Continuando execução com dados anteriores")
-                    # Não atualiza os valores de saldo aqui, mantendo os anteriores
-                
-                # Verifica se estamos na fase correta com base no capital atual
-                if capital < 300 and strategy.__class__.__name__ != "ScalpingStrategy":
-                    logger.info("Migrando para estratégia de Scalping (capital < R$300)")
-                    strategy = ScalpingStrategy(config, binance)
-                    
-                    # Define os pares iniciais baseados nos saldos disponíveis
-                    pairs = []
-                    
-                    # Carrega pares de negociação da configuração, se disponível
-                    config_pairs = config.trading_pairs if hasattr(config, 'trading_pairs') and config.trading_pairs else []
-                    
-                    # Se temos configuração explícita de pares, usamos ela
-                    if config_pairs:
-                        logger.info(f"Usando pares configurados: {config_pairs}")
-                        pairs = config_pairs
-                    # Caso contrário, definimos pares com base nas moedas disponíveis
-                    else:
-                        if config.use_testnet:
-                            pairs = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
-                            logger.info("Usando pares compatíveis com testnet para scalping")
-                        else:
-                            # Adiciona pares com base nas moedas disponíveis
-                            if usdt_balance > 0:
-                                pairs.extend(["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT"])
-                                logger.info(f"Adicionando pares USDT para negociação com saldo disponível de {usdt_balance:.2f} USDT")
-                                
-                            if brl_balance > 0:
-                                pairs.extend(["BTC/BRL", "ETH/BRL"])
-                                logger.info(f"Adicionando pares BRL para negociação com saldo disponível de {brl_balance:.2f} BRL")
-                    
-                    # Se tiver saldo de BNB, adiciona pares específicos para negociar BNB
-                    if bnb_balance > 0.01:
-                        logger.info(f"Adicionando pares de BNB para negociação com saldo disponível de {bnb_balance:.8f} BNB")
-                        if usdt_balance > 0:
-                            pairs.append("BNB/USDT")
-                            
-                        if config.use_testnet:
-                            pairs.append("BNB/BTC")
-                        else:
-                            pairs.extend(["BNB/BTC", "BNB/ETH"])
-                            if brl_balance > 0:
-                                pairs.append("BNB/BRL")
-                    
-                elif capital >= 300 and strategy.__class__.__name__ != "SwingTradingStrategy":
-                    logger.info("Migrando para estratégia de Swing Trading (capital >= R$300)")
-                    strategy = SwingTradingStrategy(config, binance)
-                    
-                    # Define os pares baseados nos saldos disponíveis
-                    pairs = []
-                    
-                    # Carrega pares de negociação da configuração, se disponível
-                    config_pairs = config.trading_pairs if hasattr(config, 'trading_pairs') and config.trading_pairs else []
-                    
-                    # Se temos configuração explícita de pares, usamos ela
-                    if config_pairs:
-                        logger.info(f"Usando pares configurados: {config_pairs}")
-                        pairs = config_pairs
-                    # Caso contrário, definimos pares com base nas moedas disponíveis
-                    else:
-                        if config.use_testnet:
-                            pairs = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "LTC/USDT", "BNB/USDT"]
-                            logger.info("Usando pares compatíveis com testnet para swing trading")
-                        else:
-                            # Adiciona pares com base nas moedas disponíveis
-                            if usdt_balance > 0:
-                                pairs.extend(["BTC/USDT", "ETH/USDT", "DOGE/USDT", "SHIB/USDT", "FLOKI/USDT"])
-                                logger.info(f"Adicionando pares USDT para negociação com saldo disponível de {usdt_balance:.2f} USDT")
-                                
-                            if brl_balance > 0:
-                                pairs.extend(["SHIB/BRL", "FLOKI/BRL", "DOGE/BRL"])
-                                logger.info(f"Adicionando pares BRL para negociação com saldo disponível de {brl_balance:.2f} BRL")
-                    
-                    # Se tiver saldo de BNB, adiciona pares específicos para negociar BNB
-                    if bnb_balance > 0.01:
-                        logger.info(f"Adicionando pares de BNB para negociação com saldo disponível de {bnb_balance:.8f} BNB")
-                        if usdt_balance > 0:
-                            pairs.append("BNB/USDT")
-                            
-                        if config.use_testnet:
-                            pairs.extend(["BNB/BTC", "BNB/ETH"])
-                        else:
-                            pairs.extend(["BNB/BTC", "BNB/ETH"])
-                            if brl_balance > 0:
-                                pairs.append("BNB/BRL")
-                
-                # Incrementa contador de salvamento de estado
-                state_save_counter += 1
+                # Pequena pausa entre análises para não sobrecarregar a API
+                time.sleep(0.5)
+            
+            # Registra o fim da análise
+            analysis_end_time = datetime.now()
+            analysis_duration = (analysis_end_time - analysis_start_time).total_seconds()
+            
+            # Logs detalhados sobre a conclusão da análise
+            logger.info(f"==================== CICLO DE ANÁLISE CONCLUÍDO ====================")
+            logger.info(f"Ciclo de análise de mercado concluído em {analysis_duration:.2f} segundos")
+            
+            # Registra média de tempo por par
+            if len(pairs) > 0:
+                avg_time_per_pair = analysis_duration / len(pairs)
+                logger.info(f"Tempo médio por par analisado: {avg_time_per_pair:.2f} segundos")
+            
+            # Calcula próximo ciclo de análise previsto
+            next_analysis_time = datetime.now() + timedelta(seconds=config.check_interval)
+            logger.info(f"Próximo ciclo de análise previsto para: {next_analysis_time.strftime('%H:%M:%S')} (em {config.check_interval} segundos)")
+            
+            # Incrementa contador de salvamento de estado
+            state_save_counter += 1
             
             # Salva o estado a cada ciclo
             if state_save_counter >= 1:
                 try:
+                    # Verifica a saúde do sistema a cada 5 ciclos
+                    if state_save_counter % 5 == 0:
+                        logger.info("Executando verificação de saúde do sistema...")
+                        check_system_health()
+                    
                     # Prepara o estado para ser salvo
                     state_to_save = {
                         'stats': {
@@ -846,8 +902,22 @@ def main():
                     # Resetamos contador de erros consecutivos quando completamos um ciclo com sucesso
                     consecutive_errors = 0
                     
+                    # Verifica a saúde do sistema a cada 5 ciclos
+                    if state_save_counter % 5 == 0:
+                        logger.info("Executando verificação de saúde do sistema...")
+                        try:
+                            health_metrics = check_system_health(notifier.notify_status if notifier else None)
+                            log_process_tree()
+                            if health_metrics and health_metrics['memory_percent'] > 85:
+                                logger.warning(f"Uso de memória alto: {health_metrics['memory_percent']}% - Forçando coleta de lixo")
+                                import gc
+                                gc.collect()
+                        except Exception as e:
+                            logger.error(f"Erro na verificação de saúde do sistema: {str(e)}")
+                    
                     # Espera o intervalo configurado antes da próxima verificação
                     logger.info(f"Aguardando {config.check_interval} segundos até próxima verificação")
+                    logger.info(f"Próxima análise prevista para: {(datetime.now() + timedelta(seconds=config.check_interval)).strftime('%H:%M:%S')}")
                     time.sleep(config.check_interval)
                 
                 except requests.exceptions.RequestException as e:
@@ -860,12 +930,14 @@ def main():
                     if consecutive_errors >= max_consecutive_errors:
                         logger.error(f"Muitos erros consecutivos ({consecutive_errors}). Aplicando pausa longa.")
                         wait_time = 300  # 5 minutos de pausa após muitos erros
+                        # Não reinicializa aqui, apenas espera mais tempo
                     
                     if hasattr(e, 'response') and e.response:
                         status_code = e.response.status_code
                         if status_code == 429:  # Rate limit
                             logger.error("Erro 429: Rate limit atingido. Pausa longa necessária.")
                             wait_time = max(wait_time, 120)  # Pelo menos 2 minutos para rate limit
+                            logger.info(f"Próxima tentativa em {wait_time} segundos (aproximadamente {wait_time/60:.1f} minutos)")
                     
                     logger.warning(f"Aguardando {wait_time} segundos antes de tentar novamente...")
                     time.sleep(wait_time)
@@ -879,30 +951,34 @@ def main():
                     # Notifica via Telegram, mas continua a execução
                     if notifier:
                         try:
-                            notifier.notify_error(f"Erro recuperável: {str(e)[:100]}")
+                            notifier.notify_error(f"Erro recuperável: {str(e)[:100]} - Tentativa {consecutive_errors}/{max_consecutive_errors}")
                         except:
-                            pass
+                            logger.error("Falha ao enviar notificação de erro")
                     
                     # Pausa para recuperação
                     wait_time = min(120, 10 * consecutive_errors)
                     logger.warning(f"Aguardando {wait_time} segundos para recuperação...")
+                    logger.info(f"Próxima tentativa em {wait_time} segundos (aproximadamente {wait_time/60:.1f} minutos)")
                     time.sleep(wait_time)
                     
-                    # Se tivermos muitos erros consecutivos, pode ser um problema mais sério
+                    # Se tivermos muitos erros consecutivos, tenta recuperar sem reinicializar completamente
                     if consecutive_errors >= max_consecutive_errors:
-                        logger.error(f"Limite de erros consecutivos atingido ({max_consecutive_errors}). "
-                                    f"Reiniciando recursos para tentar recuperar.")
+                        logger.error(f"Limite de erros consecutivos atingido ({max_consecutive_errors}). " 
+                                    f"Tentando recuperar conexões sem reinicializar.")
                         
-                        # Tenta reiniciar recursos críticos
+                        # Tenta restaurar recursos críticos
                         try:
-                            logger.info("Tentando reinicializar conexão com a Binance...")
+                            logger.info("Tentando restaurar conexão com a API...")
                             if not config.simulation_mode:
-                                binance = BinanceAPI(config.api_key, config.api_secret, testnet=config.use_testnet)
-                            
-                            # Reseta contador após reinicialização
-                            consecutive_errors = 0
+                                # Apenas testa a conexão em vez de reinicializar completamente
+                                if binance.test_connection():
+                                    logger.info("Conexão restaurada com sucesso")
+                                    consecutive_errors = max(0, consecutive_errors - 2)  # Reduz o contador de erros
+                                else:
+                                    logger.error("Falha ao restaurar conexão")
                         except Exception as reinit_error:
-                            logger.error(f"Erro ao reinicializar recursos: {str(reinit_error)}")
+                            logger.error(f"Erro ao restaurar recursos: {str(reinit_error)}")
+                            logger.exception("Detalhes do erro de restauração:")
                 
     except KeyboardInterrupt:
         logger.info("Bot interrompido pelo usuário")

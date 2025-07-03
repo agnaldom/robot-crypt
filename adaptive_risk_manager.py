@@ -14,6 +14,13 @@ import numpy as np
 from config import Config
 from utils import setup_logger
 
+# Importar analisador de contexto avançado se disponível
+try:
+    from contextual_analysis.advanced_context_analyzer import AdvancedContextAnalyzer
+    advanced_context_available = True
+except ImportError:
+    advanced_context_available = False
+
 class AdaptiveRiskManager:
     """
     Gerenciador de risco adaptativo que ajusta dinamicamente parâmetros como
@@ -25,16 +32,31 @@ class AdaptiveRiskManager:
     4. Condições de mercado variáveis
     """
     
-    def __init__(self, db_manager, config=None):
+    def __init__(self, db_manager, config=None, context_analyzer=None, news_analyzer=None):
         """Inicializa o gerenciador de risco adaptativo
         
         Args:
             db_manager: Instância do DBManager para acessar dados históricos
             config: Configuração do bot (opcional)
+            context_analyzer: Analisador de contexto externo (opcional)
+            news_analyzer: Analisador de notícias (opcional)
         """
         self.db_manager = db_manager
         self.config = config if config else Config()
         self.logger = logging.getLogger("robot-crypt")
+        
+        # Inicializa o analisador de contexto avançado se não for fornecido
+        self.context_analyzer = context_analyzer
+        self.news_analyzer = news_analyzer
+        
+        # Se não foi fornecido um analisador de contexto, tenta criar um novo
+        if advanced_context_available and not self.context_analyzer:
+            try:
+                self.context_analyzer = AdvancedContextAnalyzer(config=config, news_analyzer=news_analyzer)
+                self.logger.info("Analisador de contexto avançado inicializado com sucesso")
+            except Exception as e:
+                self.logger.error(f"Erro ao inicializar analisador de contexto: {str(e)}")
+                self.context_analyzer = None
         
         # Parâmetros de controle
         self.min_history_entries = 5  # Mínimo de operações históricas necessárias
@@ -438,6 +460,28 @@ class AdaptiveRiskManager:
         Returns:
             dict: Parâmetros ajustados
         """
+        # Se temos o analisador de contexto avançado, vamos usar
+        context_data = None
+        if self.context_analyzer:
+            try:
+                # Extrai símbolo base da criptomoeda, se for um par como BTC/USDT
+                crypto_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+                # Obter análise contextual e ajustes recomendados
+                risk_base = base_params.get('stop_loss', 0.005)  # Usar stop_loss como base de risco
+                context_data = self.context_analyzer.get_trading_adjustments(crypto_symbol, risk_base)
+                self.logger.info(f"Análise contextual obtida para {crypto_symbol}: {context_data['context_score']:.2f}")
+                
+                # Atualizar/complementar fatores externos
+                if external_factors is None:
+                    external_factors = {}
+                external_factors.update({
+                    'market_context_score': context_data['context_score'],
+                    'market_impact': context_data['market_impact'],
+                    'alert_level': context_data['alert_level']
+                })
+            except Exception as e:
+                self.logger.error(f"Erro ao obter dados contextuais para {symbol}: {str(e)}")
+        
         # Verificar se temos modelo para este símbolo
         if symbol not in self.risk_models:
             # Criar um modelo básico
@@ -447,19 +491,43 @@ class AdaptiveRiskManager:
         model = self.risk_models[symbol]
         adjustments = model['adjustments']
         
+        # Se temos dados contextuais, aplicar ajustes adicionais
+        context_adjustments = {}
+        if context_data and 'adjustments' in context_data:
+            context_adjustments = context_data['adjustments']
+            self.logger.info(f"Aplicando ajustes contextuais para {symbol}: {context_adjustments}")
+        
         # Obter parâmetros base
         stop_loss = base_params.get('stop_loss', model.get('base_stop_loss', 0.005))
         take_profit = base_params.get('take_profit', model.get('base_take_profit', 0.015))
         position_size = base_params.get('position_size', model.get('base_position_size', 0.1))
         max_hold_time = base_params.get('max_hold_time', model.get('base_max_hold_time', 24))
         
-        # Aplicar ajustes
+        # Aplicar ajustes do modelo de risco
         adjusted_params = {
             'stop_loss': round(stop_loss * adjustments['stop_loss_factor'], 4),
             'take_profit': round(take_profit * adjustments['take_profit_factor'], 4),
             'position_size': round(position_size * adjustments['position_size_factor'], 4),
             'max_hold_time': round(max_hold_time * adjustments['max_hold_time_factor'], 1)
         }
+        
+        # Se temos ajustes contextuais, aplicar como uma camada adicional
+        if context_adjustments:
+            # Aplicar fator de ajuste contextual para stop loss
+            if 'stop_loss_factor' in context_adjustments:
+                adjusted_params['stop_loss'] = round(adjusted_params['stop_loss'] * context_adjustments['stop_loss_factor'], 4)
+            
+            # Aplicar fator de ajuste contextual para take profit
+            if 'take_profit_factor' in context_adjustments:
+                adjusted_params['take_profit'] = round(adjusted_params['take_profit'] * context_adjustments['take_profit_factor'], 4)
+            
+            # Aplicar fator de ajuste contextual para tamanho da posição
+            if 'position_size_factor' in context_adjustments:
+                adjusted_params['position_size'] = round(adjusted_params['position_size'] * context_adjustments['position_size_factor'], 4)
+            
+            # Aplicar fator de ajuste contextual para tempo máximo de retenção
+            if 'hold_time_factor' in context_adjustments:
+                adjusted_params['max_hold_time'] = round(adjusted_params['max_hold_time'] * context_adjustments['hold_time_factor'], 1)
         
         # Adicionar justificativas para cada ajuste
         justifications = {

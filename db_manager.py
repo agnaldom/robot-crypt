@@ -38,7 +38,7 @@ class DBManager:
     def setup_tables(self):
         """Configura as tabelas do banco de dados"""
         try:
-            # Tabela de operações
+            # Tabela de operações (versão aprimorada)
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS operations (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +49,18 @@ class DBManager:
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                     profit_percent REAL,
                     net_profit REAL,
-                    fees REAL
+                    fees REAL,
+                    entry_price REAL,
+                    exit_price REAL,
+                    volume REAL,
+                    trade_duration INTEGER,
+                    trade_strategy TEXT,
+                    risk_percentage REAL,
+                    position_size_percentage REAL,
+                    stop_loss REAL,
+                    take_profit REAL,
+                    balance_before REAL,
+                    balance_after REAL
                 )
             ''')
             
@@ -75,6 +86,93 @@ class DBManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     state_data TEXT NOT NULL,
                     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Nova tabela para histórico de saldo
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS balance_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    balance REAL NOT NULL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Nova tabela para estatísticas de performance detalhadas
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS performance_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    period_type TEXT NOT NULL,  -- 'daily', 'weekly', 'monthly'
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
+                    initial_capital REAL,
+                    final_capital REAL,
+                    total_trades INTEGER,
+                    winning_trades INTEGER,
+                    losing_trades INTEGER,
+                    win_rate REAL,
+                    avg_profit_per_trade REAL,
+                    avg_loss_per_trade REAL,
+                    profit_factor REAL,
+                    max_consecutive_wins INTEGER,
+                    max_consecutive_losses INTEGER,
+                    max_drawdown REAL,
+                    max_drawdown_percent REAL,
+                    sharpe_ratio REAL,
+                    avg_trade_duration REAL,  -- em minutos
+                    best_symbol TEXT,
+                    worst_symbol TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(period_type, start_date, end_date)
+                )
+            ''')
+            
+            # Nova tabela para dados de mercado
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS market_data (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    interval TEXT NOT NULL,  -- '1m', '5m', '15m', '1h', '4h', '1d'
+                    open_time DATETIME NOT NULL,
+                    open_price REAL NOT NULL,
+                    high_price REAL NOT NULL,
+                    low_price REAL NOT NULL,
+                    close_price REAL NOT NULL,
+                    volume REAL NOT NULL,
+                    quote_asset_volume REAL,
+                    number_of_trades INTEGER,
+                    taker_buy_base_volume REAL,
+                    taker_buy_quote_volume REAL,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, interval, open_time)
+                )
+            ''')
+            
+            # Nova tabela para indicadores técnicos calculados
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS technical_indicators (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    interval TEXT NOT NULL,
+                    indicator_name TEXT NOT NULL,
+                    indicator_value REAL,
+                    timestamp DATETIME NOT NULL,
+                    calculated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, interval, indicator_name, timestamp)
+                )
+            ''')
+            
+            # Nova tabela para sinais de compra/venda identificados
+            self.cursor.execute('''
+                CREATE TABLE IF NOT EXISTS trading_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol TEXT NOT NULL,
+                    signal_type TEXT NOT NULL,  -- 'buy', 'sell', 'neutral'
+                    signal_strength REAL,  -- 0.0 a 1.0
+                    strategy TEXT NOT NULL,
+                    indicator_values TEXT,  -- JSON com valores dos indicadores
+                    timestamp DATETIME NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
             

@@ -19,7 +19,9 @@ plotly>=5.10.0
 
 # Armazenamento de Dados
 pymongo>=4.2.0
+psycopg2-binary>=2.9.5
 
 # Utilidades
 python-dotenv>=0.21.0
 flask>=2.0.0
+psutil>=5.9.0

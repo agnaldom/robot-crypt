@@ -565,15 +565,102 @@ class SwingTradingStrategy(TradingStrategy):
             return None
             
     def check_new_listing(self, symbol):
-        """Verifica se é uma nova listagem na Binance ou outras exchanges"""
-        # Na implementação real, usaria API para verificar listagens recentes
-        # Para demonstração, simulamos uma verificação
+        """Verifica se é uma nova listagem na Binance ou outras exchanges
+        
+        Args:
+            symbol (str): Símbolo do par de trading (ex: "BTC/USDT")
+            
+        Returns:
+            bool: True se for uma nova listagem (menos de 14 dias), False caso contrário
+        """
         try:
-            # Aqui seria implementada uma lógica para verificar novas listagens
-            # Por exemplo, consultando CoinMarketCal ou Binance Announcements
+            # Extrai o símbolo base (primeiro elemento antes da /)
+            base_symbol = symbol.split('/')[0] if '/' in symbol else symbol
+            api_symbol = symbol.replace('/', '') # Para API da Binance
+            
+            # Método 1: Verificar o histórico de preços - se tiver menos de 14 dias de dados
+            # é uma forte indicação de que é uma nova listagem
+            try:
+                # Tenta buscar 14 dias de dados diários
+                klines = self.binance.get_klines(api_symbol, "1d", 14)
+                
+                # Se temos menos de 10 dias de dados, consideramos uma nova listagem
+                if len(klines) < 10:
+                    self.logger.info(f"{symbol} é uma nova listagem! Apenas {len(klines)} dias de dados disponíveis.")
+                    return True
+            except Exception as e:
+                self.logger.warning(f"Erro ao verificar histórico de preços para {symbol}: {str(e)}")
+            
+            # Método 2: Consultar endpoint de informações de símbolos da Binance
+            try:
+                symbol_info = self.binance.get_symbol_info(api_symbol)
+                if symbol_info:
+                    # Algumas exchanges fornecem data de listagem nos metadados
+                    # Se tiver 'onboardDate' ou campo similar, podemos usá-lo
+                    # Como o método é específico para cada exchange, vamos implementar uma lógica geral
+                    
+                    # Se o símbolo foi listado recentemente, o status pode ser "NEW" ou "INNOVATION_ZONE"
+                    status = symbol_info.get('status', '')
+                    if status in ['NEW', 'INNOVATION_ZONE']:
+                        self.logger.info(f"{symbol} está marcado como {status} na Binance - considerado nova listagem!")
+                        return True
+                        
+                    # Outra abordagem: verificar o volume de negociação - moedas recém-listadas
+                    # tendem a ter um grande aumento inicial de volume
+                    if symbol_info.get('volume') and symbol_info.get('count'):
+                        if int(symbol_info.get('count')) < 1000:
+                            self.logger.info(f"{symbol} tem poucas transações ({symbol_info.get('count')}) - provável nova listagem!")
+                            return True
+            except Exception as e:
+                self.logger.warning(f"Erro ao verificar informações do símbolo {symbol}: {str(e)}")
+            
+            # Método 3: Verificação em cache local
+            # Mantém uma lista de moedas verificadas recentemente
+            cache_file = Path(os.path.dirname(os.path.abspath(__file__))) / "data" / "new_listings_cache.json"
+            
+            listings_data = {}
+            if cache_file.exists():
+                try:
+                    with open(cache_file, 'r') as f:
+                        listings_data = json.load(f)
+                except Exception as e:
+                    self.logger.warning(f"Erro ao ler cache de novas listagens: {str(e)}")
+            
+            # Verifica se a moeda já está no cache e se foi marcada como nova listagem
+            if base_symbol in listings_data:
+                # Verifica se a data de verificação é recente (menos de 14 dias)
+                try:
+                    checked_time = datetime.fromisoformat(listings_data[base_symbol]['checked_at'])
+                    is_new = listings_data[base_symbol]['is_new_listing']
+                    days_since_check = (datetime.now() - checked_time).days
+                    
+                    # Se foi marcada como nova listagem há menos de 14 dias, continua considerando como nova
+                    if is_new and days_since_check < 14:
+                        self.logger.info(f"{symbol} foi marcado como nova listagem há {days_since_check} dias.")
+                        return True
+                except Exception as e:
+                    self.logger.warning(f"Erro ao processar dados de cache para {symbol}: {str(e)}")
+            
+            # Se chegou até aqui, não é uma nova listagem, atualiza o cache
+            listings_data[base_symbol] = {
+                'checked_at': datetime.now().isoformat(),
+                'is_new_listing': False
+            }
+            
+            # Salva o cache atualizado
+            try:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, 'w') as f:
+                    json.dump(listings_data, f, indent=2)
+            except Exception as e:
+                self.logger.warning(f"Erro ao salvar cache de novas listagens: {str(e)}")
+                
+            # Método 4: Para uma implementação mais completa, seria possível consultar APIs externas
+            # como CoinMarketCap, CoinGecko ou até mesmo feeds RSS de anúncios oficiais da Binance
+            
             return False
         except Exception as e:
-            self.logger.error(f"Erro ao verificar nova listagem: {str(e)}")
+            self.logger.error(f"Erro ao verificar nova listagem para {symbol}: {str(e)}")
             return False
     
     def get_volume_data(self, symbol, notifier=None):

@@ -39,7 +39,10 @@ class Config:
             if testnet_key and testnet_secret:
                 self.api_key = testnet_key
                 self.api_secret = testnet_secret
-        self.check_interval = 300  # 5 minutos entre verificações
+        
+        # Conversão do intervalo de trading para segundos
+        trading_interval = os.environ.get("TRADING_INTERVAL", "5m")
+        self.check_interval = self._convert_interval_to_seconds(trading_interval)
         self.max_trades_per_day = 3  # Máximo de 3 trades por dia (conforme plano)
         
         # Carrega configurações de notificação do Telegram
@@ -52,7 +55,14 @@ class Config:
         take_profit_percentage = os.environ.get("TAKE_PROFIT_PERCENTAGE")
         stop_loss_percentage = os.environ.get("STOP_LOSS_PERCENTAGE")
         max_hold_time = os.environ.get("MAX_HOLD_TIME")
-        entry_delay = os.environ.get("ENTRY_DELAY")  # Adicionado para corrigir erro
+        
+        # Tenta pegar entry_delay, mas sanitiza para remover comentários
+        entry_delay_str = os.environ.get("ENTRY_DELAY", "")
+        if entry_delay_str:
+            # Remove qualquer comentário que possa estar na string
+            entry_delay = entry_delay_str.split('#')[0].strip()
+        else:
+            entry_delay = None
         
         # Carrega pares de trading do arquivo .env
         trading_pairs_str = os.environ.get("TRADING_PAIRS", "")
@@ -111,7 +121,7 @@ class Config:
             "stop_loss": float(stop_loss_percentage) / 100 if stop_loss_percentage else 0.03,          # Padrão: 3%
             "max_hold_time": float(max_hold_time) / 3600 if max_hold_time else 48,  # Converter segundos para horas
             "max_position_size": 0.05,    # Máximo 5% do capital por posição
-            "entry_delay": int(entry_delay) if entry_delay else 60  # Delay entre análise e execução (segundos)
+            "entry_delay": 60  # Delay entre análise e execução (segundos)
         }
         
         # Carrega configuração de arquivo se fornecido
@@ -218,3 +228,33 @@ class Config:
             logger.error(f"Erro ao calcular saldo total: {str(e)}")
             logger.error("Usando valor padrão de 100.0 BRL")
             return 100.0  # Valor padrão em caso de erro
+    
+    def _convert_interval_to_seconds(self, interval):
+        """Converte intervalos como '1m', '15m', '1h' para segundos"""
+        import logging
+        logger = logging.getLogger("robot-crypt")
+        
+        try:
+            # Extrai o valor numérico e a unidade
+            value = int(''.join(filter(str.isdigit, interval)))
+            unit = ''.join(filter(str.isalpha, interval)).lower()
+            
+            # Conversão para segundos com base na unidade
+            if unit == 'm' or unit == 'min':
+                seconds = value * 60
+            elif unit == 'h' or unit == 'hour':
+                seconds = value * 3600
+            elif unit == 'd' or unit == 'day':
+                seconds = value * 86400
+            elif unit == 's' or unit == 'sec':
+                seconds = value
+            else:
+                logger.warning(f"Unidade de intervalo não reconhecida: {unit}. Usando padrão de 300 segundos.")
+                seconds = 300
+                
+            logger.info(f"Intervalo de verificação configurado: {interval} ({seconds} segundos)")
+            return seconds
+            
+        except Exception as e:
+            logger.error(f"Erro ao converter intervalo {interval}: {str(e)}. Usando padrão de 300 segundos.")
+            return 300  # Padrão: 5 minutos

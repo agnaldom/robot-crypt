@@ -706,6 +706,174 @@ def filtrar_pares_por_liquidez(pares, volume_minimo, binance_api):
     
     return pares_filtrados
 
+def get_precision_for_symbol(symbol, price, binance_api=None):
+    """Determina a precisão adequada para uma moeda com base em seu preço e regras da exchange
+    
+    Args:
+        symbol (str): Símbolo da moeda (ex: 'BTC/USDT' ou 'BTCUSDT')
+        price (float): Preço atual da moeda
+        binance_api (BinanceAPI, optional): Instância da API da Binance para consultar regras exatas
+        
+    Returns:
+        dict: Dicionário com precisões para quantidade e preço
+    """
+    # Formato padrão para retorno
+    result = {
+        'quantity_precision': 6,  # Padrão: 6 casas decimais para quantidade
+        'price_precision': 2,      # Padrão: 2 casas decimais para preço
+        'min_qty': 0.000001,       # Quantidade mínima padrão
+        'min_notional': 10.0       # Valor mínimo da ordem em USDT/BRL
+    }
+    
+    # Se temos acesso à API da Binance, consultamos as regras exatas do símbolo
+    if binance_api:
+        try:
+            # Formato esperado pela API
+            api_symbol = symbol.replace('/', '')
+            symbol_info = binance_api.get_symbol_info(api_symbol)
+            
+            if symbol_info and 'filters' in symbol_info:
+                # Extrai informações dos filtros da Binance
+                for filter_data in symbol_info['filters']:
+                    # Filtro de precisão de preço (PRICE_FILTER)
+                    if filter_data['filterType'] == 'PRICE_FILTER':
+                        tick_size = float(filter_data['tickSize'])
+                        # Calcula a precisão a partir do tickSize
+                        price_precision = 0
+                        if tick_size < 1:
+                            decimal_str = str(tick_size).split('.')[-1]
+                            # Conta o número de zeros após o ponto decimal
+                            price_precision = len(decimal_str.rstrip('0'))
+                        result['price_precision'] = price_precision
+                    
+                    # Filtro de precisão de lote (LOT_SIZE)
+                    elif filter_data['filterType'] == 'LOT_SIZE':
+                        step_size = float(filter_data['stepSize'])
+                        min_qty = float(filter_data['minQty'])
+                        # Calcula a precisão a partir do stepSize
+                        qty_precision = 0
+                        if step_size < 1:
+                            decimal_str = str(step_size).split('.')[-1]
+                            qty_precision = len(decimal_str.rstrip('0'))
+                        result['quantity_precision'] = qty_precision
+                        result['min_qty'] = min_qty
+                    
+                    # Filtro de valor mínimo (MIN_NOTIONAL)
+                    elif filter_data['filterType'] == 'MIN_NOTIONAL':
+                        min_notional = float(filter_data['minNotional'])
+                        result['min_notional'] = min_notional
+                
+                return result
+        except Exception as e:
+            logger = logging.getLogger("robot-crypt")
+            logger.warning(f"Erro ao obter precisão para {symbol} via API: {str(e)}")
+            # Continua com a lógica baseada em preço
+    
+    # Lógica baseada em preço quando não temos acesso à API ou falhou
+    # Essa é uma heurística simplificada que funciona bem para a maioria dos casos
+    
+    # Determina a precisão do preço com base no valor
+    if price < 0.00001:    # Extremamente pequeno (ex: SHIB)
+        result['price_precision'] = 8
+    elif price < 0.0001:   # Muito pequeno
+        result['price_precision'] = 7
+    elif price < 0.001:    # Pequeno
+        result['price_precision'] = 6
+    elif price < 0.01:     # Moderado-baixo
+        result['price_precision'] = 5
+    elif price < 0.1:      # Moderado
+        result['price_precision'] = 4
+    elif price < 1.0:      # Normal-baixo
+        result['price_precision'] = 3
+    elif price < 10.0:     # Normal
+        result['price_precision'] = 2
+    elif price < 1000.0:   # Alto
+        result['price_precision'] = 2
+    else:                   # Muito alto (ex: BTC)
+        result['price_precision'] = 1
+    
+    # Determina a precisão da quantidade com base no preço
+    # As regras aqui são inversas: quanto maior o preço, maior a precisão da quantidade
+    if price < 0.000001:   # Extremamente pequeno
+        result['quantity_precision'] = 0  # Sem casas decimais (geralmente grandes quantidades)
+    elif price < 0.0001:   # Muito pequeno
+        result['quantity_precision'] = 0
+    elif price < 0.01:     # Pequeno
+        result['quantity_precision'] = 2
+    elif price < 0.1:      # Moderado-baixo
+        result['quantity_precision'] = 4
+    elif price < 1.0:      # Moderado
+        result['quantity_precision'] = 4
+    elif price < 10.0:     # Normal-baixo
+        result['quantity_precision'] = 5
+    elif price < 100.0:    # Normal
+        result['quantity_precision'] = 6
+    elif price < 1000.0:   # Alto
+        result['quantity_precision'] = 6
+    elif price < 10000.0:  # Muito alto
+        result['quantity_precision'] = 7
+    else:                   # Extremamente alto
+        result['quantity_precision'] = 8
+    
+    # Definir valores mínimos com base no preço
+    if price < 0.00001:    # Extremamente pequeno
+        result['min_qty'] = 1.0       # Geralmente para moedas como SHIB
+        result['min_notional'] = 5.0  # Valor mínimo em USDT/BRL
+    elif price < 0.01:     # Pequeno
+        result['min_qty'] = 0.1
+        result['min_notional'] = 5.0
+    elif price < 1.0:      # Moderado
+        result['min_qty'] = 0.01
+        result['min_notional'] = 10.0
+    elif price < 100.0:    # Normal
+        result['min_qty'] = 0.001
+        result['min_notional'] = 10.0
+    elif price < 1000.0:   # Alto
+        result['min_qty'] = 0.0001
+        result['min_notional'] = 10.0
+    else:                   # Muito alto
+        result['min_qty'] = 0.00001
+        result['min_notional'] = 10.0
+    
+    return result
+
+def adjust_quantity_precision(quantity, symbol, price, binance_api=None):
+    """Ajusta a precisão da quantidade de acordo com as regras da exchange
+    
+    Args:
+        quantity (float): Quantidade a ser ajustada
+        symbol (str): Símbolo da moeda (ex: 'BTC/USDT')
+        price (float): Preço atual da moeda
+        binance_api (BinanceAPI, optional): Instância da API da Binance para consultar regras exatas
+        
+    Returns:
+        float: Quantidade ajustada com precisão correta
+    """
+    # Obtém as regras de precisão para o símbolo
+    precision_rules = get_precision_for_symbol(symbol, price, binance_api)
+    
+    # Obtém a precisão da quantidade
+    qty_precision = precision_rules['quantity_precision']
+    min_qty = precision_rules['min_qty']
+    min_notional = precision_rules['min_notional']
+    
+    # Ajusta a quantidade de acordo com a precisão
+    adjusted_quantity = round(quantity, qty_precision)
+    
+    # Garante que a quantidade é pelo menos o mínimo permitido
+    adjusted_quantity = max(adjusted_quantity, min_qty)
+    
+    # Verifica se o valor total da ordem atinge o mínimo notional
+    notional_value = adjusted_quantity * price
+    if notional_value < min_notional:
+        # Ajusta a quantidade para atingir o valor mínimo
+        min_required_qty = min_notional / price
+        adjusted_quantity = max(adjusted_quantity, min_required_qty)
+        # Arredonda novamente para a precisão correta
+        adjusted_quantity = round(adjusted_quantity, qty_precision)
+    
+    return adjusted_quantity
+
 def retry_operation(operation, max_retries=3, initial_wait=1, max_wait=60, logger=None):
     """
     Executa uma operação com mecanismo de retry com backoff exponencial

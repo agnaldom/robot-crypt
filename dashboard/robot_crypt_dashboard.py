@@ -75,10 +75,16 @@ class RobotCryptDashboard:
             self.app = dash.Dash(
                 __name__, 
                 title='Robot-Crypt Dashboard',
-                meta_tags=[{'name': 'viewport', 'content': 'width=device-width, initial-scale=1'}]
+                meta_tags=[{'name': 'viewport', 'content': 'width=device-width, initial-scale=1'}],
+                update_title=None
             )
             self._setup_layout()
             self._setup_callbacks()
+            
+            # Em vez de usar before_first_request (removido nas versões recentes do Flask)
+            # vamos executar a configuração do servidor diretamente
+            with self.app.server.app_context():
+                self._setup_server()
             logger.info("Dashboard inicializado com sucesso")
         except Exception as e:
             self.available = False
@@ -96,6 +102,11 @@ class RobotCryptDashboard:
                     html.Span(id='last-update-time', className='update-time')
                 ], className='update-info')
             ], className='header'),
+            
+            # Avisos de contexto e alertas
+            html.Div([
+                html.Div(id='market-context-alert', className='market-context-alert')
+            ], className='alert-container'),
             
             # Linha de métricas principais (KPIs)
             html.Div([
@@ -461,6 +472,15 @@ class RobotCryptDashboard:
             'params_history': params_data,
             'context_history': context_data
         }
+    
+    def _setup_server(self):
+        """Configura o servidor Flask sem usar before_first_request"""
+        try:
+            # Realize aqui as configurações que seriam feitas no before_first_request
+            logger.info("Configuração do servidor realizada com sucesso")
+        except Exception as e:
+            logger.error(f"Erro ao configurar servidor: {str(e)}")
+            logger.exception("Detalhes do erro:")
     
     def start(self, debug=False):
         """

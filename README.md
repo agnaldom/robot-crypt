@@ -21,32 +21,48 @@ Ele implementa uma estratégia progressiva que evolui de acordo com o cresciment
 - **NOVO:** Integração com APIs de eventos de criptomoedas (CoinMarketCal, CryptoPanic)
 - **NOVO:** Relatórios gráficos e visualização de desempenho (Matplotlib)
 - **NOVO:** Testes unitários automatizados (PyTest)
+- **NOVO:** Verificação robusta de novas listagens na Binance
+- **NOVO:** Ajuste preciso de quantidade e preço segundo regras da Binance
+- **NOVO:** Análise contextual avançada de mercado
 
-## Plano Estratégico
+## Estrutura Geral
 
-O bot implementa o seguinte plano estratégico progressivo:
+O bot utiliza duas estratégias principais:
 
-### Fase 1: Educação & Preparação (Semanas 1-2)
-- Estudar análise técnica usando TradingView, Binance Academy
-- Dominar a Binance com Testnet e simulações
-- Analisar mercados com CoinGecko e CryptoPanic
+1. **ScalpingStrategy** — Para capital menor (abaixo de R$300). Foca em ganhos rápidos e manejo rígido do risco.
+2. **SwingTradingStrategy** — Para capital maior (R$300 ou mais). Trabalha com altcoins e movimentos maiores de preço e volume.
 
-### Fase 2: Operações Iniciais (R$100 → R$300)
-- **Estratégia**: Scalping de Baixo Risco
-- **Pares**: BTC/BRL, ETH/BRL (alta liquidez)
-- **Entradas**: Compra quando o ativo cai 1.5% em 1h e está próximo do suporte diário
-- **Alvos**: Ganhos de 1-3% por operação (descontando taxas)
-- **Stop Loss**: 0.5% abaixo do preço de entrada
-- **Gestão de Risco**: Máximo 1% do capital em risco por operação
+## Critérios de Compra
 
-### Fase 3: Aceleração (R$300 → R$1.000)
-- **Estratégia**: Swing Trading em Altcoins
-- **Pares**: Criptomoedas < R$1.00 (SHIB/BRL, FLOKI/BRL, DOGE/BRL, etc.)
-- **Entradas**: Volume 30% acima da média diária ou novas listagens
-- **Alvos**: 7-10% de lucro (descontando taxas)
-- **Stop Loss**: 3% abaixo do preço de entrada
-- **Saída por Tempo**: Vende após 48h independente do resultado
-- **Alocação**: Máximo 5% do capital por posição
+### Para Scalping
+
+- Procura pares que tiveram queda de pelo menos 1.5% na última hora.
+- Verifica proximidade ao nível de suporte (dentro de 1.5%).
+- Limita o risco a 1% do capital por operação.
+- Posição máxima corresponde a 5% do capital total.
+- Aplica stop loss de 0.5% abaixo do preço de entrada.
+
+### Para Swing Trading
+
+- Busca altcoins com preço abaixo de R$1,00.
+- Identifica aumento significativo no volume (>30% acima da média dos últimos dias).
+- Verifica se o ativo é uma nova listagem (detecção aprimorada implementada).
+- Posição máxima de 5% do capital.
+- Stop loss aplicado a 3% abaixo do preço de entrada.
+
+## Critérios de Venda
+
+### Para Scalping
+
+- Vende quando o lucro alcança a meta configurada (tipicamente 2-3%).
+- Vende caso o preço atinja o stop loss.
+- Sem tempo máximo de retenção definido.
+
+### Para Swing Trading
+
+- Vende ao alcançar alvo de lucro (7-10% padrão configurado).
+- Ou vende se o preço cair abaixo do stop loss.
+- Ou vende após 48 horas mesmo sem realizar lucro (tempo máximo de exposição).
 
 ### Fase 4: Otimização (R$1.000+)
 Esta fase está planejada para implementação futura e incluirá:
@@ -57,16 +73,13 @@ Esta fase está planejada para implementação futura e incluirá:
 | Launchpads | 10-50% por IEO | Médio |
 | Bot Trading | 0.5-2% ao dia | Controlado |
 
-## Regras de Ouro Implementadas
+## Gestão de Risco
 
-O bot implementa as seguintes regras rígidas de gestão de risco:
-
-- **Risco Controlado**: Nunca arrisca >5% do capital em uma única operação
-- **Cálculo de Taxas**: Contabiliza corretamente as taxas (0.1% spot na Binance) antes de operar
-- **Limite de Negociações**: Máximo de 3 trades por dia para evitar over-trading
-- **Parada após Perdas**: Para operações após 2 prejuízos consecutivos
-- **Gestão de Exposição**: Cálculo de posição proporcional ao risco tolerado
-- **Stop Loss Automático**: Proteção contra movimentos adversos de preço
+- Limita o número de trades diários a 3.
+- Pausa as operações após 2 perdas consecutivas (regra do ouro).
+- Ajusta dinamicamente o risco e tamanho da posição após perdas consecutivas.
+- Cálculo preciso das taxas da Binance (0.1% compra e 0.1% venda).
+- Limita a exposição máxima em cada operação a 5% do capital.
 
 ### Fórmula de Risco
 
@@ -80,9 +93,29 @@ entrada = capital * (risco_por_operacao / 100)  # R$1
 custo_total = (valor * 0.001) * 2  # 0.1% na compra + 0.1% na venda
 ```
 
-### Critérios Técnicos
+## Análise Técnica
 
-O bot implementa critérios técnicos específicos para cada fase:
+- Identifica níveis recentes de suporte e resistência utilizando dados das últimas 24 horas / 1 hora.
+- Considera médias móveis e variações de preço para fundamentar análises.
+- Implementa e lista indicadores técnicos avançados, incluindo:
+  - RSI (Índice de Força Relativa)
+  - MACD (Moving Average Convergence Divergence)
+  - Bandas de Bollinger
+  - Oscilador Estocástico
+  - Médias Móveis Exponenciais (EMAs)
+  - Médias Móveis Simples (SMAs)
+  - ATR (Average True Range)
+  - Ichimoku Cloud
+  - Volume Profile (Perfil de Volume)
+
+## Integração com Análise Contextual
+
+- Utiliza o `AdvancedContextAnalyzer` para captar fatores externos que influenciam o mercado, incluindo:
+  - Novas notícias econômicas e criptomoedas em tempo real.
+  - Eventos macroeconômicos globais.
+  - Regulamentações e políticas governamentais.
+  - Dados sociais e sentimento de mercado.
+- Os dados contextuais são integrados na gestão de risco adaptativa para ajustes automáticos nos parâmetros de trading.
 
 ## Instalação
 
