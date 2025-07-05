@@ -1,29 +1,80 @@
 version: '3.8'
 
 services:
-  robot-crypt:
-    build: .
-    container_name: robot-crypt
-    volumes:
-      - ./.env:/app/.env
-      - ./logs:/app/logs
-      - ./data:/app/data
-    restart: unless-stopped
-    environment:
-      - TZ=America/Sao_Paulo
-      - DASHBOARD_PORT=8050
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
     ports:
-      - "8050:8050"  # Expõe a porta do dashboard
-    command: python main.py
-    
-  # Serviço opcional para visualização de logs
-  # Descomente para usar
-  # logs-viewer:
-  #   image: amir20/dozzle:latest
-  #   container_name: robot-crypt-logs
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   ports:
-  #     - "9999:8080"
-  #   depends_on:
-  #     - robot-crypt
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/robot_crypt
+      - DEBUG=true
+      - SECRET_KEY=dev-secret-key-change-in-production
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    networks:
+      - robot-crypt-network
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: robot_crypt
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - robot-crypt-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - robot-crypt-network
+
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      - db
+    restart: unless-stopped
+    networks:
+      - robot-crypt-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  robot-crypt-network:
+    driver: bridge

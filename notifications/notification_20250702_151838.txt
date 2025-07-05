@@ -1,6 +1,0 @@
-Data: 2025-07-02 15:18:38
-Mensagem: ℹ️ STATUS
-📊 RELATÓRIO DE DESEMPENHO:
-💰 Capital: R$193.69 (-99.87%)
-📈 Trades: 0 ganhos, 0 perdas
-⏱️ Tempo de execução: 96.0 horas

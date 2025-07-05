@@ -24,6 +24,8 @@ Ele implementa uma estratégia progressiva que evolui de acordo com o cresciment
 - **NOVO:** Verificação robusta de novas listagens na Binance
 - **NOVO:** Ajuste preciso de quantidade e preço segundo regras da Binance
 - **NOVO:** Análise contextual avançada de mercado
+- **NOVO:** Dashboard implementado como projeto separado (frontend independente)
+- **NOVO:** Gerenciador de carteira para monitorar ativos Binance e seu valor em USDT
 
 ## Estrutura Geral
 
@@ -150,6 +152,40 @@ O bot também rastreia métricas de mercado para melhorar a tomada de decisões:
 - Variação de volume (24h)
 - Níveis de suporte e resistência
 - Tendências de curto e médio prazo
+
+## Gerenciamento de Carteira
+
+O bot inclui um gerenciador de carteira que permite monitorar os ativos em sua conta Binance:
+
+- Sincroniza saldos de todos os ativos em sua conta
+- Calcula o valor em USDT de cada ativo
+- Armazena os dados no banco PostgreSQL para análise histórica
+- Pode ser executado independentemente do bot principal
+
+### Usando o gerenciador de carteira
+
+```bash
+# Sincronizar dados da carteira com o banco de dados
+./sync_wallet.sh
+
+# Especificar um ID de usuário diferente
+./sync_wallet.sh --user-id "seu_id"
+
+# Para desativar a exibição detalhada dos ativos
+./sync_wallet.sh --no-details
+```
+
+### Através da ferramenta de manutenção:
+
+```bash
+# Sincronizar carteira através da ferramenta de manutenção
+python3 maintenance_tool.py --sync-wallet
+
+# Com ID de usuário personalizado
+python3 maintenance_tool.py --sync-wallet --user-id "seu_id"
+```
+
+O ID de usuário também pode ser definido na variável de ambiente `WALLET_USER_ID` no arquivo `.env`.
 
 ## Notificações e Alertas
 
