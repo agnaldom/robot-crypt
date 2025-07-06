@@ -52,47 +52,11 @@ class WalletManager:
         self.logger.info("WalletManager inicializado com sucesso")
         
     def _create_wallet_table_if_not_exists(self):
-        """Cria a tabela de carteira se ainda não existir"""
-        try:
-            # Verificar se a conexão está estabelecida
-            self.postgres_manager.connect()
-            if self.postgres_manager.conn and self.postgres_manager.cursor:
-                # Criar tabela para armazenar dados da carteira do usuário
-                self.postgres_manager.cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS user_wallet (
-                        id SERIAL PRIMARY KEY,
-                        timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        user_id VARCHAR(100) NOT NULL,
-                        asset VARCHAR(20) NOT NULL,
-                        free DECIMAL(24, 8) NOT NULL,
-                        locked DECIMAL(24, 8) NOT NULL,
-                        total DECIMAL(24, 8) NOT NULL,
-                        usdt_value DECIMAL(24, 8),
-                        total_balance DECIMAL(24, 8),
-                        last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                
-                # Criar índice para melhorar a performance das consultas
-                self.postgres_manager.cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_user_wallet_user_asset 
-                    ON user_wallet(user_id, asset)
-                """)
-                
-                # Criar índice para consultas por timestamp
-                self.postgres_manager.cursor.execute("""
-                    CREATE INDEX IF NOT EXISTS idx_user_wallet_timestamp 
-                    ON user_wallet(timestamp)
-                """)
-                
-                # Commit das alterações
-                self.postgres_manager.conn.commit()
-                
-                self.logger.info("Tabela user_wallet verificada/criada com sucesso")
-                return True
-        except Exception as e:
-            self.logger.error(f"Erro ao criar tabela user_wallet: {str(e)}")
-            return False
+        """Método obsoleto - agora usamos asset_balances table criada no PostgresManager"""
+        # A tabela asset_balances já é criada no PostgresManager._setup_tables()
+        # Este método é mantido apenas para compatibilidade
+        self.logger.info("Usando tabela asset_balances gerenciada pelo PostgresManager")
+        return True
     
     def get_wallet_balance(self, user_id, store=True):
         """
@@ -129,14 +93,35 @@ class WalletManager:
                         if asset['asset'] == currency:
                             usdt_value = total
                         else:
-                            # Tenta obter o preço deste ativo em USDT
-                            symbol = f"{asset['asset']}{currency}"
-                            ticker = self.binance_api.get_ticker_price(symbol)
-                            if ticker:
-                                price = float(ticker.get('price', 0))
-                                usdt_value = total * price
+                            # Lista de símbolos conhecidos por causar problemas
+                            problematic_assets = [
+                                'ETHW', 'LUNA', 'UST', 'BTCST', 'BCC', 'SOLO', 'LUNC', 'USTC', 
+                                'FTT', 'SRM', 'RAY', 'FIDA', 'KIN', 'MER', 'OXY', 'STEP', 'COPE',
+                                'MAPS', 'TULIP', 'SLRS', 'LIKE', 'AURY', 'DXL', 'MNGO', 'PRT',
+                                'WOOP', 'ALEPH', 'CCAI', 'BOBA', 'MULTI', 'TOKE', 'ORCA', 'SUNNY',
+                                'ATLAS', 'POLIS', 'GOFX', 'DFL', 'SHIB1000', 'DOGE1000', 'ELON1000'
+                            ]
+                            
+                            if asset['asset'] in problematic_assets:
+                                self.logger.info(f"Pulando ativo problemático conhecido: {asset['asset']}")
+                                usdt_value = 0.0
+                            else:
+                                # Tenta obter o preço deste ativo em USDT
+                                symbol = f"{asset['asset']}{currency}"
+                                ticker = self.binance_api.get_ticker_price(symbol)
+                                if ticker:
+                                    price = float(ticker.get('price', 0))
+                                    usdt_value = total * price
+                                else:
+                                    self.logger.warning(f"Preço não encontrado para {symbol}")
+                                    usdt_value = 0.0
                     except Exception as e:
-                        self.logger.warning(f"Erro ao obter preço para {asset['asset']}: {str(e)}")
+                        # Log mais específico sobre o erro
+                        if "400 Client Error" in str(e) and "Bad Request" in str(e):
+                            self.logger.warning(f"Par de trading {asset['asset']}/USDT não existe na Binance")
+                        else:
+                            self.logger.warning(f"Erro ao obter preço para {asset['asset']}: {str(e)}")
+                        usdt_value = 0.0
                     
                     balances.append({
                         'asset': asset['asset'],
@@ -225,7 +210,7 @@ class WalletManager:
     
     def get_wallet_history(self, user_id, days=30):
         """
-        Obtém o histórico da carteira do usuário no banco de dados
+        Obtém o histórico da carteira do usuário no banco de dados usando asset_balances
         
         Args:
             user_id (str): ID do usuário
@@ -235,36 +220,8 @@ class WalletManager:
             list: Histórico da carteira
         """
         try:
-            # Verificar se a conexão está estabelecida
-            self.postgres_manager.connect()
-            if self.postgres_manager.conn and self.postgres_manager.cursor:
-                # Consulta o histórico de carteira do usuário
-                self.postgres_manager.cursor.execute("""
-                    SELECT 
-                        timestamp, 
-                        asset, 
-                        free, 
-                        locked, 
-                        total, 
-                        usdt_value 
-                    FROM 
-                        user_wallet 
-                    WHERE 
-                        user_id = %s AND
-                        timestamp >= NOW() - INTERVAL '%s days'
-                    ORDER BY 
-                        timestamp DESC, 
-                        usdt_value DESC
-                """, (user_id, days))
-                
-                results = self.postgres_manager.cursor.fetchall()
-                
-                # Converte para lista de dicionários
-                history = []
-                for row in results:
-                    history.append(dict(row))
-                    
-                return history
+            # Usa o método do PostgresManager para obter evolução do portfólio
+            return self.postgres_manager.get_portfolio_evolution(user_id, days=days)
                     
         except Exception as e:
             self.logger.error(f"Erro ao obter histórico da carteira: {str(e)}")
@@ -272,7 +229,7 @@ class WalletManager:
             
     def get_total_balance(self, user_id):
         """
-        Obtém o saldo total da carteira do usuário em USDT
+        Obtém o saldo total da carteira do usuário em USDT usando asset_balances
         
         Args:
             user_id (str): ID do usuário
@@ -281,22 +238,9 @@ class WalletManager:
             float: Saldo total em USDT
         """
         try:
-            # Verificar se a conexão está estabelecida
-            self.postgres_manager.connect()
-            if self.postgres_manager.conn and self.postgres_manager.cursor:
-                # Consulta o saldo total
-                self.postgres_manager.cursor.execute("""
-                    SELECT 
-                        total_balance
-                    FROM 
-                        user_wallet 
-                    WHERE 
-                        user_id = %s
-                    LIMIT 1
-                """, (user_id,))
-                
-                result = self.postgres_manager.cursor.fetchone()
-                return float(result[0]) if result and result[0] else 0.0
+            # Usa o método do PostgresManager para obter saldo total atual
+            total_balance = self.postgres_manager.get_user_total_balance(user_id)
+            return total_balance.get('total_balance_usdt', 0.0)
                     
         except Exception as e:
             self.logger.error(f"Erro ao obter saldo total: {str(e)}")

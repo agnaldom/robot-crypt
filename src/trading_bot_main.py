@@ -367,14 +367,20 @@ def main():
         logger.info("Sinal de encerramento recebido durante a inicialização. Encerrando.")
         return
     
-    # Inicializa o gerenciador de carteira
+    # Inicializa o gerenciador de carteira com tratamento de erro robusto
     user_id = os.environ.get("WALLET_USER_ID", "default_user")
-    wallet_manager = initialize_wallet_manager(binance, db, user_id)
+    wallet_manager = None
     
-    # Verifica se a inicialização do gerenciador de carteira foi bem-sucedida
-    if not wallet_manager and not config.simulation_mode:
-        logger.warning("O gerenciador de carteira não foi inicializado corretamente.")
-        # Decidimos continuar mesmo se o gerenciador de carteira falhar
+    try:
+        wallet_manager = initialize_wallet_manager(binance, db, user_id)
+        if wallet_manager:
+            logger.info("Gerenciador de carteira inicializado com sucesso")
+        else:
+            logger.warning("Gerenciador de carteira retornou None - continuando sem sincronização")
+    except Exception as wallet_error:
+        logger.error(f"Erro ao inicializar gerenciador de carteira: {str(wallet_error)}")
+        logger.info("Continuando execução sem sincronização de carteira")
+        wallet_manager = None
         
     # A partir daqui, é o código original do main.py
     

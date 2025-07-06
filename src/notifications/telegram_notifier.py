@@ -7,6 +7,8 @@ import logging
 import urllib3
 import os
 import json
+import re
+import html
 from datetime import datetime
 
 # Configurando verificação SSL de forma mais segura
@@ -24,6 +26,26 @@ try:
     postgres_available = True
 except ImportError:
     postgres_available = False
+
+def mask_sensitive_data(data: str) -> str:
+    """Mascarar dados sensíveis em logs."""
+    if not data:
+        return data
+    
+    # Mascarar tokens do Telegram
+    data = re.sub(r'bot\d+:[A-Za-z0-9_-]+', 'bot***:***', data)
+    
+    # Mascarar chat IDs
+    data = re.sub(r'chat_id=(-?\d+)', r'chat_id=***', data)
+    
+    # Mascarar chaves de API
+    data = re.sub(r'[A-Za-z0-9]{64}', '***API_KEY***', data)
+    
+    # Mascarar URLs com tokens
+    data = re.sub(r'(https?://[^/]+/bot)[^/]+(/[^\s]*)', r'\1***\2', data)
+    
+    return data
+
 
 class TelegramNotifier:
     """Classe para enviar notificações via Telegram"""
@@ -77,8 +99,8 @@ class TelegramNotifier:
                 "text": sanitized_message,
                 "parse_mode": "Markdown"  # Suporte para formatação básica
             }
-            self.logger.info(f"Enviando mensagem para Telegram - URL: {url}")
-            self.logger.info(f"Dados: chat_id={self.chat_id}, texto={sanitized_message[:50]}...")
+            self.logger.info(f"Enviando mensagem para Telegram - URL: {mask_sensitive_data(url)}")
+            self.logger.info(f"Dados: chat_id={mask_sensitive_data(str(self.chat_id))}, texto={sanitized_message[:50]}...")
             
             # Adiciona mecanismo de retry para problemas de rede
             max_retries = 3
@@ -161,22 +183,37 @@ class TelegramNotifier:
     
     def _sanitize_markdown(self, text):
         """
-        Sanitiza texto para uso com Markdown no Telegram
-        Escapa caracteres especiais que podem causar problemas
+        Sanitiza texto para uso com Markdown no Telegram com proteção avançada
+        Escapa caracteres especiais e remove conteúdo potencialmente perigoso
         """
         if not text:
             return ""
-            
-        # Caracteres que precisam ser escapados no modo Markdown
-        special_chars = ['_', '*', '`', '[']
-        result = str(text)  # Converte para string caso não seja
+        
+        # Converte para string e escapa HTML primeiro
+        result = html.escape(str(text))
+        
+        # Remove padrões potencialmente perigosos
+        dangerous_patterns = [
+            r'javascript:',
+            r'data:',
+            r'vbscript:',
+            r'<script[^>]*>.*?</script>',
+            r'<iframe[^>]*>.*?</iframe>',
+            r'onload\s*=',
+            r'onerror\s*=',
+            r'onclick\s*='
+        ]
+        
+        for pattern in dangerous_patterns:
+            result = re.sub(pattern, '', result, flags=re.IGNORECASE | re.DOTALL)
         
         # Limita o tamanho da mensagem
         if len(result) > 4000:
             result = result[:3997] + "..."
         
-        # Escapa caracteres especiais
-        for char in special_chars:
+        # Escapa caracteres especiais do Markdown
+        markdown_chars = ['_', '*', '`', '[', ']', '(', ')', '~', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in markdown_chars:
             result = result.replace(char, f"\\{char}")
             
         return result
