@@ -55,3 +55,17 @@ Thumbs.db
 # Project specific
 *.json
 !example_config.json
+
+# Limpeza automática
+cleanup_backup/
+cleanup_report.json
+logs/
+notifications/*.txt
+# Ambientes virtuais
+.venv/
+# Arquivos de configuração local
+.env.local
+.env.*.local
+# Dados temporários
+data/*.bak
+*.tmp

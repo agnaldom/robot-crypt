@@ -1,46 +1,69 @@
-FROM python:3.9-slim
+# Multi-stage build for Robot-Crypt FastAPI
+FROM python:3.11-slim as builder
 
-WORKDIR /app
-
-# Instala dependências essenciais
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libsqlite3-dev \
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia os arquivos de requisitos primeiro (para melhor uso do cache do Docker)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-# Garante que o python-dotenv e outros pacotes essenciais estão instalados
-RUN pip install --no-cache-dir python-dotenv requests
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Copia o restante dos arquivos do projeto
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim as production
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Create app user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set work directory
+WORKDIR /app
+
+# Copy application code
 COPY . .
 
-# Cria a estrutura de diretórios para logs, dados e relatórios
-RUN mkdir -p /app/logs
-RUN mkdir -p /app/data
-RUN mkdir -p /app/reports
+# Change ownership to appuser
+RUN chown -R appuser:appuser /app
 
-# Torna o script de entrada executável
-RUN chmod +x /app/railway_entrypoint.sh
+# Switch to non-root user
+USER appuser
 
-# Define variáveis de ambiente
-ENV PYTHONUNBUFFERED=1
-ENV TZ=America/Sao_Paulo
-ENV PYTHONIOENCODING=utf-8
-ENV DASHBOARD_PORT=8050
+# Expose port
+EXPOSE 8000
 
-# Expõe a porta do dashboard
-EXPOSE 8050
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Torna o script de healthcheck executável
-RUN chmod +x /app/healthcheck.sh
+# Default environment variables
+ENV SIMULATION_MODE=true
+ENV USE_TESTNET=false
+ENV DEBUG=false
+ENV HOST=0.0.0.0
+ENV PORT=8000
 
-# Configuração de healthcheck
-HEALTHCHECK --interval=1m --timeout=5s --start-period=30s --retries=3 \
-  CMD /app/healthcheck.sh
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
-# Define o comando de entrada
-ENTRYPOINT ["/app/railway_entrypoint.sh"]
+# Set entrypoint
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Default command (API mode)
+CMD ["api"]
