@@ -13,6 +13,13 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Security middlewares
+from src.middleware.security_headers import (
+    SecurityHeadersMiddleware, 
+    RateLimitMiddleware, 
+    SecurityMonitoringMiddleware
+)
+
 from src.core.config import settings
 from src.database.database import Base, get_database
 
@@ -34,10 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from src.database.database import async_engine
         async with async_engine.begin() as conn:
             # Import all models to ensure they are registered
-            from src.models import (
-                user, asset, technical_indicator, macro_indicator,
-                bot_performance, risk_management, alert, trade, report
-            )
+            import src.models  # This will import all models from __init__.py
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created successfully")
     except Exception as e:
@@ -59,20 +63,35 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Add security middleware
+# Add security middlewares (order matters!)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(SecurityMonitoringMiddleware)
+app.add_middleware(RateLimitMiddleware, calls=settings.RATE_LIMIT_PER_MINUTE, period=60)
+
+# Add trusted host middleware
 if not settings.DEBUG:
     app.add_middleware(
         TrustedHostMiddleware, 
-        allowed_hosts=["localhost", "127.0.0.1", "*.herokuapp.com", "*.railway.app"]
+        allowed_hosts=["localhost", "127.0.0.1", "testserver", "*.herokuapp.com", "*.railway.app"]
     )
 
-# Add CORS middleware
+# Add CORS middleware with secure configuration
+if settings.DEBUG:
+    allowed_origins = ["*"]  # Apenas em desenvolvimento
+    allowed_methods = ["*"]
+    allowed_headers = ["*"]
+else:
+    allowed_origins = settings.ALLOWED_ORIGINS
+    allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed_headers = ["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=allowed_methods,
+    allow_headers=allowed_headers,
+    max_age=600  # Cache preflight por 10 minutos
 )
 
 
@@ -90,9 +109,10 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Include routers
 from src.api.routers import (
     auth_router, users_router, assets_router, indicators_router,
-    trades_router, alerts_router, reports_router, trading_session_router
+    trades_router, alerts_router, reports_router, portfolio_router
 )
-from src.api.websocket_endpoints import router as websocket_router
+# from src.api.routers.trading_session import router as trading_session_router  # Temporarily disabled
+# from src.api.websocket_endpoints import router as websocket_router  # Temporarily disabled
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router, prefix="/users", tags=["Users"])
@@ -101,8 +121,9 @@ app.include_router(indicators_router, prefix="/indicators", tags=["Indicators"])
 app.include_router(trades_router, prefix="/trades", tags=["Trades"])
 app.include_router(reports_router, prefix="/reports", tags=["Reports"])
 app.include_router(alerts_router, prefix="/alerts", tags=["Alerts"])
-app.include_router(trading_session_router, prefix="/trading-sessions", tags=["Trading Sessions"])
-app.include_router(websocket_router, prefix="/ws", tags=["WebSocket"])
+app.include_router(portfolio_router, prefix="/portfolio", tags=["Portfolio"])
+# app.include_router(trading_session_router, prefix="/trading-sessions", tags=["Trading Sessions"])  # Temporarily disabled
+# app.include_router(websocket_router, prefix="/ws", tags=["WebSocket"])  # Temporarily disabled
 
 
 @app.get("/")
@@ -127,12 +148,20 @@ async def health_check():
 
 @app.get("/config")
 async def get_config():
-    """Get public configuration."""
+    """Get public configuration (limited in production)."""
+    # Em produção, retornar apenas informações públicas básicas
+    if not settings.DEBUG:
+        return {
+            "app_name": settings.APP_NAME,
+            "version": settings.APP_VERSION,
+            "status": "online"
+        }
+    
+    # Em desenvolvimento, retornar mais informações
     return {
         "app_name": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "debug": settings.DEBUG,
-        "trading_pairs": settings.TRADING_PAIRS,
         "simulation_mode": settings.SIMULATION_MODE,
         "notifications_enabled": settings.notifications_enabled
     }

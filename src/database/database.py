@@ -4,13 +4,13 @@ Database configuration and session management for Robot-Crypt.
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from src.core.config import settings
 
 # Create declarative base
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
 
 # Async database engine
 async_engine = create_async_engine(

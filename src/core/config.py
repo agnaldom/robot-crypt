@@ -7,7 +7,7 @@ import secrets
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 from urllib.parse import unquote
@@ -85,8 +85,8 @@ class Settings(BaseSettings):
     
     # === CONFIGURAÇÕES DE SEGURANÇA ===
     SECRET_KEY: str = Field(
-        default_factory=lambda: secrets.token_urlsafe(32),
-        description="Chave secreta para JWT"
+        default=None,
+        description="Chave secreta para JWT (OBRIGATÓRIA em produção)"
     )
     ALGORITHM: str = Field(default="HS256", description="Algoritmo de hash para JWT")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
@@ -193,7 +193,32 @@ class Settings(BaseSettings):
         description="Limite de requisições por minuto"
     )
     
-    @validator("DATABASE_URL")
+    # === CONFIGURAÇÕES DE LOGGING ===
+    LOG_LEVEL: str = Field(
+        default="INFO",
+        description="Nível de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    )
+    LOG_FILE: str = Field(
+        default="logs/robot_crypt.log",
+        description="Caminho do arquivo de log"
+    )
+    
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v):
+        """Valida a chave secreta para JWT."""
+        if not v:
+            # Em desenvolvimento, gera uma chave temporária
+            import os
+            if os.environ.get("DEBUG", "false").lower() == "true":
+                return secrets.token_urlsafe(32)
+            raise ValueError("SECRET_KEY é obrigatória em produção. Defina uma chave forte de pelo menos 32 caracteres.")
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY deve ter pelo menos 32 caracteres para segurança adequada.")
+        return v
+    
+    @field_validator("DATABASE_URL")
+    @classmethod
     def validate_database_url(cls, v):
         """Valida e converte a URL do banco de dados."""
         if v.startswith("postgresql://"):
@@ -228,7 +253,8 @@ class Settings(BaseSettings):
                 # Se não conseguir parsear, retorna lista padrão
                 return ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
     
-    @validator("ALLOWED_ORIGINS", pre=True)
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
     def parse_allowed_origins(cls, v):
         """Parse allowed origins de string ou lista."""
         if isinstance(v, str):
