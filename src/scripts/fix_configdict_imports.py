@@ -99,8 +99,7 @@ def main():
         "src/schemas/risk_management.py",
         "src/schemas/trading_session.py",
         "src/schemas/report.py",
-        "src/modules/users/schemas/user.py",
-        "src/modules/portfolio/schemas/portfolio.py"
+        "src/schemas/portfolio.py"
     ]
     
     additional_fixes = 0

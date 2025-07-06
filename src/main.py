@@ -111,8 +111,9 @@ from src.api.routers import (
     auth_router, users_router, assets_router, indicators_router,
     trades_router, alerts_router, reports_router, portfolio_router
 )
-# from src.api.routers.trading_session import router as trading_session_router  # Temporarily disabled
-# from src.api.websocket_endpoints import router as websocket_router  # Temporarily disabled
+from src.api.routers.trading_session import router as trading_session_router
+from src.api.routers.market import router as market_router
+from src.api.websocket_endpoints import router as websocket_router
 
 app.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 app.include_router(users_router, prefix="/users", tags=["Users"])
@@ -122,8 +123,9 @@ app.include_router(trades_router, prefix="/trades", tags=["Trades"])
 app.include_router(reports_router, prefix="/reports", tags=["Reports"])
 app.include_router(alerts_router, prefix="/alerts", tags=["Alerts"])
 app.include_router(portfolio_router, prefix="/portfolio", tags=["Portfolio"])
-# app.include_router(trading_session_router, prefix="/trading-sessions", tags=["Trading Sessions"])  # Temporarily disabled
-# app.include_router(websocket_router, prefix="/ws", tags=["WebSocket"])  # Temporarily disabled
+app.include_router(trading_session_router, prefix="/trading-sessions", tags=["Trading Sessions"])
+app.include_router(market_router, prefix="/market", tags=["Market Data"])
+app.include_router(websocket_router, prefix="/ws", tags=["WebSocket"])
 
 
 @app.get("/")

@@ -12,8 +12,9 @@ from sqlalchemy.exc import IntegrityError
 
 from src.models.trading_session import (
     TradingSession, TradingSessionLog, OpenOrder, 
-    TradingSessionStatus, TradingStrategy, OrderStatus
+    TradingSessionStatus, TradingStrategy
 )
+from src.models.trade import OrderStatus
 from src.models.trade import Trade
 from src.schemas.trading_session import (
     TradingSessionCreate, TradingSessionUpdate, TradingSessionLogCreate,
@@ -355,6 +356,18 @@ class TradingSessionService:
             query = query.where(TradingSessionLog.level == level)
         
         query = query.order_by(TradingSessionLog.created_at.desc()).limit(limit)
+        
+        result = await self.db.execute(query)
+        return result.scalars().all()
+    
+    async def get_user_open_orders(self, user_id: int, limit: int = 50) -> List[OpenOrder]:
+        """Get all open orders for a user."""
+        query = select(OpenOrder).where(
+            and_(
+                OpenOrder.user_id == user_id,
+                OpenOrder.status.in_([OrderStatus.PENDING, OrderStatus.PARTIALLY_FILLED])
+            )
+        ).order_by(OpenOrder.created_at.desc()).limit(limit)
         
         result = await self.db.execute(query)
         return result.scalars().all()

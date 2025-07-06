@@ -70,12 +70,13 @@ def init_components():
     components = {}
     
     # Inicializa o analisador contextual
-    from contextual_analysis import NewsApiClient, NewsAnalyzer
-    news_client = NewsApiClient()
+    from src.api.external.news_api_client import NewsAPIClient
+    from src.analysis.news_analyzer import NewsAnalyzer
+    news_client = NewsAPIClient()
     components['news_analyzer'] = NewsAnalyzer(news_client)
     
     # Inicializa o gerenciador de risco adaptativo
-    from adaptive_risk import AdaptiveRiskManager
+    from risk_management.adaptive_risk import AdaptiveRiskManager
     components['risk_manager'] = AdaptiveRiskManager()
     
     return components
@@ -170,9 +171,9 @@ def initialize_resources():
     
     # Inicializa analisador de notícias (para análise contextual)
     try:
-        from contextual_analysis.news_analyzer import NewsAnalyzer
-        from contextual_analysis.news_api_client import NewsApiClient
-        news_client = NewsApiClient()
+        from analysis.news_analyzer import NewsAnalyzer
+        from api.external.news_api_client import NewsAPIClient
+        news_client = NewsAPIClient()
         news_analyzer = NewsAnalyzer(news_client)
         logger.info("Analisador de notícias inicializado com sucesso")
     except Exception as e:
@@ -529,10 +530,30 @@ def main():
         logger.info(f"Usando pares configurados: {config_pairs}")
         pairs = config_pairs
     
+    # Importa estratégias aprimoradas
+    try:
+        from strategies.enhanced_strategy import create_enhanced_strategy
+        use_enhanced_strategies = True
+        logger.info("Estratégias aprimoradas com IA disponíveis")
+    except ImportError as e:
+        logger.warning(f"Estratégias aprimoradas não disponíveis: {str(e)}")
+        logger.info("Usando estratégias tradicionais como fallback")
+        use_enhanced_strategies = False
+    
     # Seleciona estratégia baseada no capital
     if capital < 300:
         logger.info("Inicializando com estratégia de Scalping (capital < R$300)")
-        strategy = ScalpingStrategy(config, binance)
+        
+        if use_enhanced_strategies:
+            try:
+                strategy = create_enhanced_strategy('scalping', config, binance)
+                logger.info("✅ Estratégia de Scalping APRIMORADA com IA inicializada")
+            except Exception as e:
+                logger.error(f"Erro ao criar estratégia aprimorada: {str(e)}")
+                strategy = ScalpingStrategy(config, binance)
+                logger.info("Usando estratégia de Scalping tradicional como fallback")
+        else:
+            strategy = ScalpingStrategy(config, binance)
         
         # Define pares padrão para Scalping se não tiver configuração explícita
         if not pairs:
@@ -544,7 +565,17 @@ def main():
                 logger.info("Usando pares padrão para scalping")
     else:
         logger.info("Inicializando com estratégia de Swing Trading (capital >= R$300)")
-        strategy = SwingTradingStrategy(config, binance)
+        
+        if use_enhanced_strategies:
+            try:
+                strategy = create_enhanced_strategy('swing', config, binance)
+                logger.info("✅ Estratégia de Swing Trading APRIMORADA com IA inicializada")
+            except Exception as e:
+                logger.error(f"Erro ao criar estratégia aprimorada: {str(e)}")
+                strategy = SwingTradingStrategy(config, binance)
+                logger.info("Usando estratégia de Swing Trading tradicional como fallback")
+        else:
+            strategy = SwingTradingStrategy(config, binance)
         
         # Define pares padrão para Swing Trading se não tiver configuração explícita
         if not pairs:
@@ -745,6 +776,14 @@ def main():
             logger.info(f"Iniciando ciclo de análise de mercado às {analysis_start_time.strftime('%H:%M:%S')}")
             logger.info(f"Número de pares a analisar: {len(pairs)}")
             logger.info(f"Pares para análise: {', '.join(pairs)}")
+            
+            # Identifica se está usando estratégias aprimoradas
+            strategy_type = strategy.__class__.__name__
+            if 'Enhanced' in strategy_type:
+                ai_status = "✅ IA ATIVA" if hasattr(strategy, 'analysis_enabled') and strategy.analysis_enabled else "⚠️ IA INATIVA"
+                logger.info(f"🤖 Usando estratégia aprimorada: {strategy_type} ({ai_status})")
+            else:
+                logger.info(f"📊 Usando estratégia tradicional: {strategy_type}")
             
             # Analisa cada par em sequência
             pair_count = 0

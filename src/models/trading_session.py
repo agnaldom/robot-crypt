@@ -37,6 +37,16 @@ class TradingStrategy(str, enum.Enum):
     CUSTOM = "custom"
 
 
+class OrderStatus(str, enum.Enum):
+    """Order status enum."""
+    PENDING = "pending"
+    PARTIAL = "partial"
+    FILLED = "filled"
+    CANCELLED = "cancelled"
+    REJECTED = "rejected"
+    EXPIRED = "expired"
+
+
 class TradingSession(Base):
     """Trading session model."""
     __tablename__ = "trading_sessions"
@@ -168,7 +178,7 @@ class OpenOrder(Base):
     stop_price = Column(Float, nullable=True)  # For stop orders
     
     # Order status
-    status = Column(String(20), default="pending")  # pending, partial, filled, cancelled
+    status = Column(SQLEnum(OrderStatus), default=OrderStatus.PENDING)
     filled_quantity = Column(Float, default=0.0)
     remaining_quantity = Column(Float, nullable=False)
     average_fill_price = Column(Float, nullable=True)
@@ -201,7 +211,7 @@ class OpenOrder(Base):
     @property
     def is_active(self) -> bool:
         """Check if order is still active."""
-        return self.status in ["pending", "partial"]
+        return self.status in [OrderStatus.PENDING, OrderStatus.PARTIAL]
 
     @property
     def fill_percentage(self) -> float:

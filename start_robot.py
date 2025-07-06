@@ -6,6 +6,12 @@ import os
 import sys
 import subprocess
 import logging
+from pathlib import Path
+
+# Add src directory to Python path for proper imports
+project_root = Path(__file__).parent
+src_path = project_root / 'src'
+sys.path.insert(0, str(src_path))
 
 def setup_logging():
     logging.basicConfig(
@@ -38,9 +44,20 @@ def start_robot():
     logger = setup_logging()
     logger.info("Starting Robot-Crypt...")
     
+    # Set up environment for subprocess
+    env = os.environ.copy()
+    src_path = str(project_root / 'src')
+    
+    # Add src directory to PYTHONPATH for subprocess
+    if 'PYTHONPATH' in env:
+        env['PYTHONPATH'] = f"{src_path}{os.pathsep}{env['PYTHONPATH']}"
+    else:
+        env['PYTHONPATH'] = src_path
+    
     try:
-        # Run the bot
-        subprocess.run([sys.executable, "src/trading_bot_main.py"], check=True)
+        # Run the bot with proper PYTHONPATH
+        subprocess.run([sys.executable, "src/trading_bot_main.py"], 
+                      env=env, check=True)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
     except Exception as e:

@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.database import get_async_session
 from src.core.security import get_current_user
 from src.models.user import User
-from src.models.trading_session import TradingSessionStatus, TradingStrategy, OrderStatus
+from src.models.trading_session import TradingSessionStatus, TradingStrategy
+from src.models.trade import OrderStatus
 from src.schemas.trading_session import (
     TradingSessionCreate, TradingSessionUpdate, TradingSessionResponse,
     TradingSessionLogResponse, OpenOrderCreate, OpenOrderUpdate, OpenOrderResponse,

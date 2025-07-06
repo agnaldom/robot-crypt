@@ -13,7 +13,7 @@ from src.core.config import settings
 from src.core.security import authenticate_user, create_access_token, get_current_user
 from src.database.database import get_database
 from src.schemas.token import Token
-from src.schemas.user import User
+from src.schemas.user import User, UserCreate
 from src.services.user_service import UserService
 
 router = APIRouter()
@@ -54,6 +54,32 @@ async def test_token(current_user: User = Depends(get_current_user)) -> Any:
     Test access token.
     """
     return current_user
+
+
+@router.post("/register", response_model=User, status_code=status.HTTP_201_CREATED)
+async def register_user(
+    user_in: UserCreate,
+    db: AsyncSession = Depends(get_database)
+) -> Any:
+    """
+    Register a new user (public endpoint).
+    """
+    user_service = UserService(db)
+    
+    # Check if user already exists
+    existing_user = await user_service.get_by_email(user_in.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User with this email already exists"
+        )
+    
+    # Create new user (non-superuser by default)
+    user_in.is_superuser = False
+    user_in.is_active = True
+    
+    user = await user_service.create(user_in)
+    return user
 
 
 @router.post("/refresh")

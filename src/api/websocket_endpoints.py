@@ -14,13 +14,13 @@ from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.websocket_manager import websocket_manager, MessageType, WebSocketMessage
-from src.core.database import get_db
+from src.database.database import get_database
 from src.core.security import get_current_user_websocket
 from src.models.user import User
 from src.services.asset_service import AssetService
 from src.services.portfolio_service import PortfolioService
 from src.services.alert_service import AlertService
-from src.services.trading_session_service import TradingSessionService
+from src.services.trading_session import TradingSessionService
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ async def websocket_endpoint(
     websocket: WebSocket,
     user_id: int,
     token: str = None,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_database)
 ):
     """
     Main WebSocket endpoint for real-time communication.

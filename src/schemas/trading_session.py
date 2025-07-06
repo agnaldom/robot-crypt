@@ -151,13 +151,6 @@ class OpenOrderBase(BaseModel):
     # Metadata
     notes: Optional[str] = None
     metadata: Dict[str, Any] = {}
-    
-    @field_validator('remaining_quantity', mode='before')
-    @classmethod
-    def set_remaining_quantity(cls, v, info):
-        if v is None:
-            return info.data.get('quantity', 0)
-        return v
 
 
 class OpenOrderCreate(OpenOrderBase):
@@ -256,7 +249,7 @@ class SessionRiskMetrics(BaseModel):
 
 class BulkOrderCreate(BaseModel):
     """Bulk order creation schema."""
-    orders: List[OpenOrderCreate] = Field(..., min_items=1, max_items=100)
+    orders: List[OpenOrderCreate] = Field(..., min_length=1, max_length=100)
     session_id: Optional[int] = None
     
     @field_validator('orders')

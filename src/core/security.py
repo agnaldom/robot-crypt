@@ -180,3 +180,30 @@ async def get_current_active_superuser(
             status_code=400, detail="The user doesn't have enough privileges"
         )
     return current_user
+
+
+async def get_current_user_websocket(
+    token: str, db: AsyncSession
+) -> Optional[User]:
+    """Get the current authenticated user for WebSocket connections."""
+    try:
+        # Usar validação JWT rigorosa
+        payload = decode_jwt_with_validation(token)
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+        
+        user_service = UserService(db)
+        user = await user_service.get(int(user_id))
+        if user is None:
+            return None
+        
+        # Verificar se o usuário está ativo
+        if not user.is_active:
+            return None
+        
+        return user
+    except (JWTError, ValueError) as e:
+        logger = logging.getLogger(__name__)
+        logger.warning(f"WebSocket authentication failed: {str(e)}")
+        return None

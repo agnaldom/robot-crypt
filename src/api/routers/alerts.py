@@ -13,8 +13,15 @@ from src.database.database import get_database
 from src.schemas.alert import Alert, AlertCreate, AlertUpdate, AlertTrigger
 from src.schemas.user import User
 from src.services.alert_service import AlertService
+from src.ai.smart_alerts import SmartAlertsEngine, create_smart_alerts_engine, AlertCategory, AlertPriority
 
 router = APIRouter()
+
+
+# Dependency to get Smart Alerts Engine
+async def get_smart_alerts_engine() -> SmartAlertsEngine:
+    """Get Smart Alerts Engine instance."""
+    return await create_smart_alerts_engine()
 
 
 @router.get("/", response_model=List[Alert])
@@ -331,3 +338,238 @@ async def get_available_alert_types(
             }
         ]
     }
+
+
+# Smart Alerts Endpoints
+@router.get("/smart/categories")
+async def get_smart_alert_categories(
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get available smart alert categories.
+    """
+    return {
+        "categories": [
+            {
+                "category": "TECHNICAL",
+                "name": "Technical Analysis",
+                "description": "AI-powered technical analysis alerts"
+            },
+            {
+                "category": "NEWS",
+                "name": "News Sentiment",
+                "description": "News sentiment analysis and market impact alerts"
+            },
+            {
+                "category": "RISK",
+                "name": "Risk Management",
+                "description": "Risk assessment and portfolio protection alerts"
+            },
+            {
+                "category": "ANOMALY",
+                "name": "Anomaly Detection",
+                "description": "Unusual market behavior and pattern alerts"
+            },
+            {
+                "category": "PORTFOLIO",
+                "name": "Portfolio Optimization",
+                "description": "Portfolio rebalancing and optimization alerts"
+            }
+        ],
+        "priorities": [
+            {
+                "priority": "LOW",
+                "name": "Low Priority",
+                "description": "Information alerts for awareness"
+            },
+            {
+                "priority": "MEDIUM",
+                "name": "Medium Priority",
+                "description": "Important alerts requiring attention"
+            },
+            {
+                "priority": "HIGH",
+                "name": "High Priority",
+                "description": "Critical alerts requiring immediate action"
+            },
+            {
+                "priority": "CRITICAL",
+                "name": "Critical Priority",
+                "description": "Emergency alerts for immediate response"
+            }
+        ]
+    }
+
+
+@router.post("/smart/generate")
+async def generate_smart_alert(
+    category: AlertCategory,
+    priority: AlertPriority,
+    asset_symbol: str,
+    smart_alerts_engine: SmartAlertsEngine = Depends(get_smart_alerts_engine),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Generate a smart alert using AI analysis.
+    """
+    try:
+        alert = await smart_alerts_engine.generate_smart_alert(
+            category=category,
+            priority=priority,
+            asset_symbol=asset_symbol,
+            user_id=current_user.id
+        )
+        
+        return {
+            "status": "success",
+            "alert": {
+                "id": alert.id,
+                "category": alert.category,
+                "priority": alert.priority,
+                "title": alert.title,
+                "message": alert.message,
+                "asset_symbol": alert.asset_symbol,
+                "confidence": alert.confidence,
+                "created_at": alert.created_at.isoformat(),
+                "metadata": alert.metadata
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate smart alert: {str(e)}"
+        )
+
+
+@router.post("/smart/analyze")
+async def analyze_and_generate_alerts(
+    asset_symbol: str,
+    analysis_type: str = Query("comprehensive", description="Type of analysis: comprehensive, technical, news, risk"),
+    smart_alerts_engine: SmartAlertsEngine = Depends(get_smart_alerts_engine),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Analyze market conditions and generate relevant smart alerts.
+    """
+    try:
+        alerts = await smart_alerts_engine.analyze_and_generate_alerts(
+            asset_symbol=asset_symbol,
+            user_id=current_user.id,
+            analysis_type=analysis_type
+        )
+        
+        return {
+            "status": "success",
+            "analysis_type": analysis_type,
+            "asset_symbol": asset_symbol,
+            "alerts_generated": len(alerts),
+            "alerts": [
+                {
+                    "id": alert.id,
+                    "category": alert.category,
+                    "priority": alert.priority,
+                    "title": alert.title,
+                    "message": alert.message,
+                    "confidence": alert.confidence,
+                    "created_at": alert.created_at.isoformat()
+                }
+                for alert in alerts
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to analyze and generate alerts: {str(e)}"
+        )
+
+
+@router.post("/smart/{alert_id}/send")
+async def send_smart_alert_notification(
+    alert_id: str,
+    notification_channel: str = Query("all", description="Notification channel: telegram, local, or all"),
+    smart_alerts_engine: SmartAlertsEngine = Depends(get_smart_alerts_engine),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Send a smart alert notification through specified channels.
+    """
+    try:
+        success = await smart_alerts_engine.send_smart_alert_notification(
+            alert_id=alert_id,
+            user_id=current_user.id,
+            channel=notification_channel
+        )
+        
+        if success:
+            return {
+                "status": "success",
+                "alert_id": alert_id,
+                "notification_channel": notification_channel,
+                "message": "Smart alert notification sent successfully"
+            }
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="Smart alert not found or notification failed"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send smart alert notification: {str(e)}"
+        )
+
+
+@router.get("/smart/portfolio-insights")
+async def get_portfolio_insights(
+    include_recommendations: bool = Query(True, description="Include AI recommendations"),
+    smart_alerts_engine: SmartAlertsEngine = Depends(get_smart_alerts_engine),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get AI-powered portfolio insights and recommendations.
+    """
+    try:
+        insights = await smart_alerts_engine.get_portfolio_insights(
+            user_id=current_user.id,
+            include_recommendations=include_recommendations
+        )
+        
+        return {
+            "status": "success",
+            "user_id": current_user.id,
+            "insights": insights,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get portfolio insights: {str(e)}"
+        )
+
+
+@router.get("/smart/market-sentiment")
+async def get_market_sentiment_analysis(
+    asset_symbol: Optional[str] = Query(None, description="Specific asset symbol for sentiment analysis"),
+    smart_alerts_engine: SmartAlertsEngine = Depends(get_smart_alerts_engine),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get AI-powered market sentiment analysis.
+    """
+    try:
+        sentiment_analysis = await smart_alerts_engine.get_market_sentiment_analysis(
+            asset_symbol=asset_symbol
+        )
+        
+        return {
+            "status": "success",
+            "asset_symbol": asset_symbol,
+            "sentiment_analysis": sentiment_analysis,
+            "analyzed_at": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get market sentiment analysis: {str(e)}"
+        )
+

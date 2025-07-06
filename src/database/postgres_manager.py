@@ -93,6 +93,41 @@ class PostgresManager:
             self.conn.close()
         self.logger.info("Conexão com PostgreSQL encerrada")
     
+    def execute_query(self, query, params=None, fetch_one=False, fetch_all=False):
+        """Executa uma query genérica"""
+        self._check_and_reconnect()
+        
+        try:
+            if params:
+                self.cursor.execute(query, params)
+            else:
+                self.cursor.execute(query)
+            
+            if fetch_one:
+                return self.cursor.fetchone()
+            elif fetch_all:
+                return self.cursor.fetchall()
+            else:
+                self.conn.commit()
+                return self.cursor.rowcount
+        except Exception as e:
+            self.conn.rollback()
+            self.logger.error(f"Erro ao executar query: {e}")
+            raise
+    
+    def fetch_all(self, query, params=None):
+        """Executa query e retorna todos os resultados"""
+        return self.execute_query(query, params, fetch_all=True)
+    
+    def fetch_one(self, query, params=None):
+        """Executa query e retorna um resultado"""
+        return self.execute_query(query, params, fetch_one=True)
+    
+    def _check_and_reconnect(self):
+        """Verifica conexão e reconecta se necessário"""
+        if not self.conn or self.conn.closed:
+            self.connect()
+    
     def _setup_tables(self):
         """Configura as tabelas necessárias no banco de dados"""
         if not self.connect():
@@ -424,6 +459,79 @@ class PostgresManager:
                 ON asset_balances(usdt_value DESC)
             """)
             
+            # Tabela para dados de mercado (market_data)
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS market_data (
+                    id SERIAL PRIMARY KEY,
+                    symbol VARCHAR(20) NOT NULL,
+                    timestamp TIMESTAMP NOT NULL,
+                    open_price DECIMAL(20,8) NOT NULL,
+                    high_price DECIMAL(20,8) NOT NULL,
+                    low_price DECIMAL(20,8) NOT NULL,
+                    close_price DECIMAL(20,8) NOT NULL,
+                    volume DECIMAL(24,8) NOT NULL,
+                    interval VARCHAR(10) DEFAULT '1h',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(symbol, timestamp, interval)
+                )
+            """)
+            
+            # Tabela para logs de trading
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS trading_logs (
+                    id SERIAL PRIMARY KEY,
+                    log_type VARCHAR(50) NOT NULL,
+                    message TEXT NOT NULL,
+                    details TEXT,
+                    level VARCHAR(20) DEFAULT 'INFO',
+                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Tabela para performance de modelos
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_performance (
+                    id SERIAL PRIMARY KEY,
+                    model_name VARCHAR(100) NOT NULL,
+                    model_version VARCHAR(50),
+                    dataset_size INTEGER,
+                    accuracy DECIMAL(8,6),
+                    precision_score DECIMAL(8,6),
+                    recall_score DECIMAL(8,6),
+                    f1_score DECIMAL(8,6),
+                    roc_auc DECIMAL(8,6),
+                    cv_mean DECIMAL(8,6),
+                    cv_std DECIMAL(8,6),
+                    training_time DECIMAL(10,2),
+                    symbols TEXT,
+                    training_period_days INTEGER,
+                    model_path TEXT,
+                    metrics_json JSONB,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Índices para as novas tabelas
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_market_data_symbol_timestamp 
+                ON market_data(symbol, timestamp)
+            """)
+            
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trading_logs_timestamp 
+                ON trading_logs(timestamp)
+            """)
+            
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_trading_logs_type 
+                ON trading_logs(log_type)
+            """)
+            
+            self.cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_model_performance_name 
+                ON model_performance(model_name)
+            """)
+            
             self.conn.commit()
             self.logger.info("Tabelas verificadas/criadas com sucesso no PostgreSQL")
             return True
@@ -435,13 +543,13 @@ class PostgresManager:
     def save_notification(self, notification_type, title, message, telegram_sent=False):
         """
         Salva uma notificação no banco de dados
-        
+
         Args:
             notification_type (str): Tipo da notificação (status, trade, error, etc.)
             title (str): Título da notificação
             message (str): Conteúdo da mensagem
             telegram_sent (bool): Se a mensagem foi enviada com sucesso pelo Telegram
-        
+
         Returns:
             int: ID da notificação inserida ou None em caso de erro
         """
@@ -462,6 +570,48 @@ class PostgresManager:
         except Exception as e:
             self.conn.rollback()
             self.logger.error(f"Erro ao salvar notificação no PostgreSQL: {str(e)}")
+            return None
+    
+    def save_log(self, log_type, message, details=None, level='INFO', timestamp=None):
+        """
+        Salva um log no banco de dados
+
+        Args:
+            log_type (str): Tipo do log (training, trading, error, etc.)
+            message (str): Mensagem do log
+            details (str, opcional): Detalhes adicionais
+            level (str): Nível do log (INFO, ERROR, WARNING, etc.)
+            timestamp (datetime, opcional): Timestamp customizado
+
+        Returns:
+            int: ID do log inserido ou None em caso de erro
+        """
+        self._check_and_reconnect()
+        
+        try:
+            if timestamp:
+                query = """
+                    INSERT INTO trading_logs (log_type, message, details, level, timestamp)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
+                """
+                self.cursor.execute(query, (log_type, message, details, level, timestamp))
+            else:
+                query = """
+                    INSERT INTO trading_logs (log_type, message, details, level)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id
+                """
+                self.cursor.execute(query, (log_type, message, details, level))
+            
+            log_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            
+            self.logger.debug(f"Log salvo no PostgreSQL (ID: {log_id})")
+            return log_id
+        except Exception as e:
+            self.conn.rollback()
+            self.logger.error(f"Erro ao salvar log no PostgreSQL: {str(e)}")
             return None
     
     def save_analysis(self, symbol, analysis_type, data):

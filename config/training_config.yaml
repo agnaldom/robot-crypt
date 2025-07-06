@@ -1,0 +1,240 @@
+# Configuração do Sistema de Treinamento de Trading
+
+# Configurações de Dados
+data:
+  # Banco de dados PostgreSQL
+  database:
+    host: "localhost"
+    port: 5432
+    name: "trading_bot"
+    user: "trading_user"
+    password: "trading_pass"
+    pool_size: 10
+    max_overflow: 20
+    pool_timeout: 30
+    pool_recycle: 3600
+  
+  # Período de dados históricos (em dias)
+  historical_days: 30
+  
+  # Intervalo de coleta de dados (em minutos)
+  data_collection_interval: 60
+  
+  # Símbolos padrão para análise
+  default_symbols:
+    - "BTC/USDT"
+    - "ETH/USDT"
+    - "BNB/USDT"
+    - "ADA/USDT"
+    - "SOL/USDT"
+    - "MATIC/USDT"
+    - "DOT/USDT"
+    - "AVAX/USDT"
+    - "LINK/USDT"
+    - "UNI/USDT"
+
+# Configurações do Modelo
+model:
+  # Tipo de modelo (random_forest, gradient_boosting, neural_network)
+  type: "random_forest"
+  
+  # Caminho para salvar o modelo
+  model_path: "models/trading_model.pkl"
+  
+  # Parâmetros do Random Forest
+  random_forest:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 5
+    min_samples_leaf: 2
+    random_state: 42
+    n_jobs: -1
+  
+  # Parâmetros do Gradient Boosting
+  gradient_boosting:
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: 6
+    min_samples_split: 5
+    min_samples_leaf: 2
+    random_state: 42
+  
+  # Divisão dos dados para treino/teste
+  train_test_split: 0.8
+  
+  # Validação cruzada
+  cross_validation_folds: 5
+
+# Configurações de Features
+features:
+  # Indicadores técnicos
+  technical_indicators:
+    - "sma_10"      # Média móvel simples 10 períodos
+    - "sma_20"      # Média móvel simples 20 períodos
+    - "sma_50"      # Média móvel simples 50 períodos
+    - "ema_12"      # Média móvel exponencial 12 períodos
+    - "ema_26"      # Média móvel exponencial 26 períodos
+    - "rsi_14"      # RSI 14 períodos
+    - "macd"        # MACD
+    - "macd_signal" # MACD Signal
+    - "macd_hist"   # MACD Histograma
+    - "bb_upper"    # Banda de Bollinger superior
+    - "bb_lower"    # Banda de Bollinger inferior
+    - "bb_middle"   # Banda de Bollinger média
+    - "stoch_k"     # Stochastic %K
+    - "stoch_d"     # Stochastic %D
+    - "cci"         # Commodity Channel Index
+    - "williams_r"  # Williams %R
+    - "atr"         # Average True Range
+    - "volume_sma"  # Volume SMA
+  
+  # Features de preço
+  price_features:
+    - "price_change_1h"    # Mudança de preço 1 hora
+    - "price_change_4h"    # Mudança de preço 4 horas
+    - "price_change_24h"   # Mudança de preço 24 horas
+    - "volume_change_24h"  # Mudança de volume 24 horas
+    - "volatility_24h"     # Volatilidade 24 horas
+  
+  # Features de sentimento
+  sentiment_features:
+    - "news_sentiment"     # Sentimento das notícias
+    - "social_sentiment"   # Sentimento social
+    - "fear_greed_index"   # Índice de medo e ganância
+  
+  # Features de eventos
+  event_features:
+    - "upcoming_events"    # Eventos próximos
+    - "event_impact"       # Impacto do evento
+
+# Configurações de Sinais
+signals:
+  # Limites de confiança
+  confidence_thresholds:
+    buy: 0.65      # Confiança mínima para BUY
+    sell: 0.65     # Confiança mínima para SELL
+    hold: 0.35     # Confiança mínima para HOLD
+  
+  # Estratégias de geração de sinais
+  strategies:
+    - "price_momentum"     # Momentum de preço
+    - "technical_analysis" # Análise técnica
+    - "sentiment_analysis" # Análise de sentimento
+    - "volume_analysis"    # Análise de volume
+  
+  # Filtros de sinais
+  filters:
+    min_volume_24h: 1000000  # Volume mínimo 24h em USD
+    max_volatility: 0.2      # Volatilidade máxima
+    min_market_cap: 100000000 # Market cap mínimo em USD
+
+# Configurações de Treinamento
+training:
+  # Frequência de retreinamento (em horas)
+  retrain_frequency: 24
+  
+  # Número mínimo de samples para treinar
+  min_samples: 100
+  
+  # Métricas de avaliação
+  evaluation_metrics:
+    - "accuracy"
+    - "precision"
+    - "recall"
+    - "f1_score"
+    - "roc_auc"
+  
+  # Salvar histórico de treinamento
+  save_training_history: true
+  
+  # Caminho para histórico
+  training_history_path: "reports/training_history.json"
+  
+  # Backup automático do modelo
+  auto_backup: true
+  backup_path: "models/backups/"
+
+# Configurações de Logging
+logging:
+  # Nível de log
+  level: "INFO"
+  
+  # Formato do log
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  # Arquivos de log
+  files:
+    training: "logs/training.log"
+    data_collection: "logs/data_collection.log"
+    signals: "logs/signals.log"
+    errors: "logs/errors.log"
+  
+  # Rotação de logs
+  rotation:
+    max_size: "50MB"
+    backup_count: 5
+
+# Configurações de Notificações
+notifications:
+  # Habilitar notificações
+  enabled: false
+  
+  # Canais de notificação
+  channels:
+    email:
+      enabled: false
+      smtp_server: ""
+      smtp_port: 587
+      username: ""
+      password: ""
+      recipients: []
+    
+    discord:
+      enabled: false
+      webhook_url: ""
+    
+    telegram:
+      enabled: false
+      bot_token: ""
+      chat_id: ""
+  
+  # Eventos que geram notificações
+  events:
+    - "training_completed"
+    - "training_failed"
+    - "high_confidence_signal"
+    - "model_performance_degraded"
+
+# Configurações de Performance
+performance:
+  # Usar multiprocessing
+  use_multiprocessing: true
+  
+  # Número de workers
+  n_workers: 4
+  
+  # Cache de dados
+  cache_enabled: true
+  cache_size: 1000
+  
+  # Timeout para APIs (em segundos)
+  api_timeout: 30
+  
+  # Retry para APIs
+  api_retry_attempts: 3
+  api_retry_delay: 1
+
+# Configurações de Segurança
+security:
+  # Máximo de tentativas de API por minuto
+  api_rate_limit: 100
+  
+  # Timeout de conexão
+  connection_timeout: 30
+  
+  # Verificar certificados SSL
+  verify_ssl: true
+  
+  # Headers de segurança
+  security_headers:
+    User-Agent: "TradingBot/1.0"

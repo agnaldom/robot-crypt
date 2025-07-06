@@ -170,6 +170,10 @@ class Settings(BaseSettings):
     )
     
     # === CONFIGURAÇÕES DE APIs EXTERNAS ===
+    COINMARKETCAP_API_KEY: Optional[str] = Field(
+        default=None,
+        description="Chave da API do CoinMarketCap"
+    )
     COINMARKETCAL_API_KEY: Optional[str] = Field(
         default=None,
         description="Chave da API do CoinMarketCal"
@@ -180,7 +184,7 @@ class Settings(BaseSettings):
     )
     NEWS_API_KEY: Optional[str] = Field(
         default=None,
-        description="Chave da API de notícias"
+        description="Chave da API do NewsAPI (newsapi.org)"
     )
     
     # === CONFIGURAÇÕES DE CACHE E RATE LIMITING ===

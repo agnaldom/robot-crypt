@@ -6,7 +6,17 @@ import time
 import logging
 import numpy as np
 from datetime import datetime, timedelta
-from ..utils.utils import format_symbol
+
+# Import com path absoluto para evitar problemas de import relativo
+import sys
+from pathlib import Path
+
+# Adiciona src ao path se necessário
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from utils.utils import format_symbol
 
 class TradingStrategy:
     """Classe base para estratégias de negociação"""
@@ -666,7 +676,7 @@ class SwingTradingStrategy(TradingStrategy):
                 self.logger.warning(f"Erro ao salvar cache de novas listagens: {str(e)}")
                 
             # Método 4: Para uma implementação mais completa, seria possível consultar APIs externas
-            # como CoinMarketCap, CoinGecko ou até mesmo feeds RSS de anúncios oficiais da Binance
+            # como CoinMarketCap ou até mesmo feeds RSS de anúncios oficiais da Binance
             
             return False
         except Exception as e:
