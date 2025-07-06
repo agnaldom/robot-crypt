@@ -14,6 +14,8 @@ from src.schemas.technical_indicator import TechnicalIndicator, TechnicalIndicat
 from src.schemas.macro_indicator import MacroIndicator, MacroIndicatorCreate
 from src.schemas.user import User
 from src.services.asset_service import AssetService
+from src.services.technical_indicator_service import TechnicalIndicatorService
+from src.services.macro_indicator_service import MacroIndicatorService
 
 router = APIRouter()
 
@@ -31,9 +33,15 @@ async def read_technical_indicators(
     """
     Retrieve technical indicators with optional filters.
     """
-    # TODO: Implement TechnicalIndicatorService
-    # For now, return empty list
-    return []
+    technical_service = TechnicalIndicatorService(db)
+    indicators = await technical_service.get_multi(
+        skip=skip,
+        limit=limit,
+        asset_id=asset_id,
+        indicator_type=indicator_type,
+        timeframe=timeframe
+    )
+    return indicators
 
 
 @router.post("/technical", response_model=TechnicalIndicator)
@@ -45,8 +53,9 @@ async def create_technical_indicator(
     """
     Create new technical indicator.
     """
-    # TODO: Implement TechnicalIndicatorService
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    technical_service = TechnicalIndicatorService(db)
+    indicator = await technical_service.create(indicator_in)
+    return indicator
 
 
 @router.get("/macro", response_model=List[MacroIndicator])
@@ -61,9 +70,14 @@ async def read_macro_indicators(
     """
     Retrieve macro indicators with optional filters.
     """
-    # TODO: Implement MacroIndicatorService
-    # For now, return empty list
-    return []
+    macro_service = MacroIndicatorService(db)
+    indicators = await macro_service.get_multi(
+        skip=skip,
+        limit=limit,
+        category=category,
+        impact=impact
+    )
+    return indicators
 
 
 @router.post("/macro", response_model=MacroIndicator)
@@ -75,8 +89,9 @@ async def create_macro_indicator(
     """
     Create new macro indicator.
     """
-    # TODO: Implement MacroIndicatorService
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    macro_service = MacroIndicatorService(db)
+    indicator = await macro_service.create(indicator_in)
+    return indicator
 
 
 @router.post("/calculate")
@@ -91,50 +106,23 @@ async def calculate_indicators(
     Calculate technical indicators for an asset.
     """
     asset_service = AssetService(db)
+    technical_service = TechnicalIndicatorService(db)
+    
     asset = await asset_service.get_by_symbol(asset_symbol)
     
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
     
-    # TODO: Implement indicator calculation logic
-    # This would typically involve:
-    # 1. Fetching price data for the asset
-    # 2. Calculating requested indicators
-    # 3. Storing results in database
-    # 4. Returning calculated values
-    
-    calculated_indicators = {}
-    
-    for indicator in indicators:
-        if indicator == "RSI":
-            # Mock RSI calculation
-            calculated_indicators["RSI"] = {
-                "value": 45.6,
-                "signal": "neutral",
-                "timeframe": timeframe,
-                "calculated_at": datetime.now().isoformat()
-            }
-        elif indicator == "MA":
-            # Mock Moving Average calculation
-            calculated_indicators["MA"] = {
-                "value": asset.current_price * 0.98 if asset.current_price else 50000,
-                "period": 20,
-                "signal": "bullish",
-                "timeframe": timeframe,
-                "calculated_at": datetime.now().isoformat()
-            }
-        elif indicator == "EMA":
-            # Mock Exponential Moving Average calculation
-            calculated_indicators["EMA"] = {
-                "value": asset.current_price * 1.02 if asset.current_price else 52000,
-                "period": 20,
-                "signal": "bearish",
-                "timeframe": timeframe,
-                "calculated_at": datetime.now().isoformat()
-            }
+    # Calculate requested indicators using the service
+    calculated_indicators = await technical_service.calculate_multiple_indicators(
+        asset_id=asset.id,
+        timeframe=timeframe,
+        indicators=indicators
+    )
     
     return {
         "asset_symbol": asset_symbol,
+        "asset_id": asset.id,
         "timeframe": timeframe,
         "indicators": calculated_indicators,
         "calculated_at": datetime.now().isoformat()
@@ -152,45 +140,51 @@ async def get_trading_signals(
     """
     Get trading signals based on technical indicators.
     """
-    # TODO: Implement trading signal generation
-    # This would typically involve:
-    # 1. Analyzing current technical indicators
-    # 2. Applying trading rules/strategies
-    # 3. Generating buy/sell/hold signals
-    # 4. Returning signals with confidence levels
+    asset_service = AssetService(db)
+    technical_service = TechnicalIndicatorService(db)
     
-    # Mock signals for demonstration
     signals = []
     
-    if not asset_symbol or asset_symbol == "BTC/USDT":
-        signals.append({
-            "asset_symbol": "BTC/USDT",
-            "signal_type": "buy",
-            "strength": 0.75,
-            "price": 45000,
-            "reasoning": "RSI oversold + MA support",
-            "indicators": {
-                "RSI": 28.5,
-                "MA_20": 44800,
-                "EMA_12": 45200
-            },
-            "timestamp": datetime.now().isoformat()
-        })
-    
-    if not asset_symbol or asset_symbol == "ETH/USDT":
-        signals.append({
-            "asset_symbol": "ETH/USDT",
-            "signal_type": "sell",
-            "strength": 0.65,
-            "price": 2800,
-            "reasoning": "RSI overbought + resistance level",
-            "indicators": {
-                "RSI": 78.2,
-                "MA_20": 2750,
-                "EMA_12": 2820
-            },
-            "timestamp": datetime.now().isoformat()
-        })
+    if asset_symbol:
+        # Generate signals for specific asset
+        asset = await asset_service.get_by_symbol(asset_symbol)
+        if asset:
+            signal_data = await technical_service.generate_trading_signals(
+                asset_id=asset.id,
+                timeframe="1h"
+            )
+            
+            signals.append({
+                "asset_symbol": asset_symbol,
+                "signal_type": signal_data["signal"],
+                "strength": signal_data["confidence"],
+                "price": asset.current_price,
+                "reasoning": ", ".join([s["reason"] for s in signal_data["individual_signals"]]),
+                "indicators_used": signal_data["indicators_used"],
+                "individual_signals": signal_data["individual_signals"],
+                "timestamp": signal_data["generated_at"]
+            })
+    else:
+        # Generate signals for multiple assets
+        popular_symbols = ["BTC/USDT", "ETH/USDT", "ADA/USDT", "SOL/USDT"]
+        
+        for symbol in popular_symbols:
+            asset = await asset_service.get_by_symbol(symbol)
+            if asset:
+                signal_data = await technical_service.generate_trading_signals(
+                    asset_id=asset.id,
+                    timeframe="1h"
+                )
+                
+                signals.append({
+                    "asset_symbol": symbol,
+                    "signal_type": signal_data["signal"],
+                    "strength": signal_data["confidence"],
+                    "price": asset.current_price,
+                    "reasoning": ", ".join([s["reason"] for s in signal_data["individual_signals"]]) if signal_data["individual_signals"] else "No specific signals",
+                    "indicators_used": signal_data["indicators_used"],
+                    "timestamp": signal_data["generated_at"]
+                })
     
     # Apply filters
     if signal_type:
@@ -214,22 +208,28 @@ async def get_market_overview(
     """
     Get overall market overview with key indicators.
     """
-    # TODO: Implement comprehensive market analysis
-    # This would include:
-    # 1. Fear & Greed Index
-    # 2. Market trends
-    # 3. Volume analysis
-    # 4. Key economic indicators
+    macro_service = MacroIndicatorService(db)
+    asset_service = AssetService(db)
     
-    return {
-        "fear_greed_index": {
-            "value": 42,
-            "classification": "Fear",
-            "last_updated": datetime.now().isoformat()
-        },
+    # Get market sentiment analysis
+    sentiment_analysis = await macro_service.get_market_sentiment_analysis()
+    
+    # Get Fear & Greed Index
+    fear_greed = await macro_service.get_fear_greed_index()
+    
+    # Get recent economic events
+    recent_events = await macro_service.get_recent_events(days_back=3)
+    upcoming_events = await macro_service.get_upcoming_events(days_ahead=7)
+    
+    # Get market indices
+    indices = await macro_service.get_by_category("index", limit=5)
+    
+    # Mock some market data for demonstration
+    # In a real implementation, this would come from market data APIs
+    mock_market_data = {
         "market_trend": {
-            "direction": "sideways",
-            "strength": 0.3,
+            "direction": "bullish" if sentiment_analysis["sentiment_score"] > 60 else "bearish" if sentiment_analysis["sentiment_score"] < 40 else "sideways",
+            "strength": abs(sentiment_analysis["sentiment_score"] - 50) / 50,
             "timeframe": "daily"
         },
         "volume_analysis": {
@@ -246,6 +246,46 @@ async def get_market_overview(
                 {"symbol": "DOGE/USDT", "change": -4.8},
                 {"symbol": "SHIB/USDT", "change": -3.2}
             ]
+        }
+    }
+    
+    return {
+        "fear_greed_index": {
+            "value": fear_greed.value if fear_greed else None,
+            "classification": fear_greed.metadata.get("classification") if fear_greed else None,
+            "last_updated": fear_greed.created_at.isoformat() if fear_greed else None
         },
+        "market_sentiment": {
+            "score": sentiment_analysis["sentiment_score"],
+            "sentiment": sentiment_analysis["overall_sentiment"],
+            "factors": sentiment_analysis["sentiment_factors"]
+        },
+        "market_trend": mock_market_data["market_trend"],
+        "volume_analysis": mock_market_data["volume_analysis"],
+        "top_movers": mock_market_data["top_movers"],
+        "recent_events": [
+            {
+                "name": event.name,
+                "impact": event.impact,
+                "date": event.event_date.isoformat() if event.event_date else event.created_at.isoformat()
+            }
+            for event in recent_events[:3]
+        ],
+        "upcoming_events": [
+            {
+                "name": event.name,
+                "impact": event.impact,
+                "date": event.event_date.isoformat() if event.event_date else None
+            }
+            for event in upcoming_events[:3]
+        ],
+        "market_indices": [
+            {
+                "name": idx.name,
+                "value": idx.value,
+                "change_percent": idx.metadata.get("change_percent")
+            }
+            for idx in indices
+        ],
         "generated_at": datetime.now().isoformat()
     }

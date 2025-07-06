@@ -235,8 +235,28 @@ class BinanceAPI:
     def get_ticker_price(self, symbol):
         """Obtém preço atual de um par"""
         endpoint = "/v3/ticker/price"
-        params = {'symbol': format_symbol(symbol)}
-        return self._make_request('GET', endpoint, params)
+        formatted_symbol = format_symbol(symbol)
+        params = {'symbol': formatted_symbol}
+        
+        try:
+            return self._make_request('GET', endpoint, params)
+        except Exception as e:
+            # Se for erro 400, provavelmente o símbolo não existe
+            if hasattr(e, 'response') and e.response and e.response.status_code == 400:
+                self._log_structured("warning", 
+                    f"Símbolo {symbol} ({formatted_symbol}) não é válido para ticker/price na Binance", 
+                    {
+                        "original_symbol": symbol,
+                        "formatted_symbol": formatted_symbol,
+                        "status_code": 400,
+                        "suggestion": "Verificar se o par de trading está ativo na Binance"
+                    }
+                )
+                # Retorna None para que o código continue funcionando
+                return None
+            else:
+                # Para outros erros, re-levanta a exceção
+                raise
     
     def get_klines(self, symbol, interval, limit=500):
         """Obtém dados de candlestick (OHLCV)"""

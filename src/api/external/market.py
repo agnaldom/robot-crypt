@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from enum import Enum
 import json
 
-from core.config import settings
-from core.logging_setup import logger
+from src.core.config import settings
+from src.core.logging_setup import logger
 
 
 class APIProvider(Enum):
@@ -71,17 +71,19 @@ class RateLimiter:
     
     async def acquire(self):
         """Acquire permission to make an API call."""
-        now = time.time()
-        # Remove calls older than 1 minute
-        self.calls = [call_time for call_time in self.calls if now - call_time < 60]
-        
-        if len(self.calls) >= self.calls_per_minute:
-            sleep_time = 60 - (now - self.calls[0]) + 1
-            logger.warning(f"Rate limit reached, sleeping for {sleep_time:.2f} seconds")
-            await asyncio.sleep(sleep_time)
-            return await self.acquire()
-        
-        self.calls.append(now)
+        while True:
+            now = time.time()
+            # Remove calls older than 1 minute
+            self.calls = [call_time for call_time in self.calls if now - call_time < 60]
+            
+            if len(self.calls) >= self.calls_per_minute:
+                sleep_time = 60 - (now - self.calls[0])
+                logger.warning(f"Rate limiter: sleeping for {sleep_time:.1f} seconds")
+                await asyncio.sleep(sleep_time)
+                continue
+            
+            self.calls.append(now)
+            break
 
 
 class EnhancedMarketDataProvider:
@@ -159,7 +161,9 @@ class EnhancedMarketDataProvider:
                         await asyncio.sleep(retry_after)
                         continue
                     else:
-                        response.raise_for_status()
+                        if hasattr(response, "status_code") and response.status_code >= 400:
+
+                            raise Exception(f"HTTP {response.status_code}: {getattr(response, "text", "Unknown error")}")
                         
             except aiohttp.ClientError as e:
                 logger.warning(f"{provider} API request failed (attempt {attempt + 1}): {e}")
@@ -442,7 +446,9 @@ class EnhancedNewsProvider:
                 if response.status == 200:
                     return await response.json()
                 else:
-                    response.raise_for_status()
+                    if hasattr(response, "status_code") and response.status_code >= 400:
+
+                        raise Exception(f"HTTP {response.status_code}: {getattr(response, "text", "Unknown error")}")
                     
         except aiohttp.ClientError as e:
             logger.error(f"CryptoPanic API request failed: {e}")

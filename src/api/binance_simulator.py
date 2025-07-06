@@ -1,110 +1,189 @@
 #!/usr/bin/env python3
 """
-Módulo de simulação da API da Binance para testes sem conexão real
+Simulador robusto da API Binance para desenvolvimento e testes
 """
-import logging
 import random
 import time
-from datetime import datetime
-from ..utils.utils import format_symbol
+import logging
+from datetime import datetime, timedelta
 
 class BinanceSimulator:
-    """Classe para simular a API da Binance para testes"""
+    """Simulador da API Binance que não faz requisições reais"""
     
     def __init__(self):
-        """Inicializa o simulador"""
         self.logger = logging.getLogger("robot-crypt")
-        self.logger.info("Inicializando simulador da Binance")
+        self.logger.info("Inicializando Simulador Binance (sem requisições reais)")
         
-        # Dados simulados
-        self.simulated_balance = {"USDT": 100.0, "BTC": 0.001, "ETH": 0.01, "BRL": 500.0}
-        self.orders = {}
-        self.next_order_id = 1000
-        self.base_prices = {
-            "BTCBRL": 150000.0, "ETHBRL": 8500.0, "SHIBUSDT": 0.00001,
-            "FLOKIUSDT": 0.00002, "BTCUSDT": 30000.0, "ETHUSDT": 1700.0
+        # Preços simulados para pares comuns
+        self.simulated_prices = {
+            "BTCUSDT": 45000 + random.uniform(-5000, 5000),
+            "ETHUSDT": 3000 + random.uniform(-500, 500),
+            "BNBUSDT": 300 + random.uniform(-50, 50),
+            "ADAUSDT": 0.5 + random.uniform(-0.1, 0.1),
+            "DOGEUSDT": 0.08 + random.uniform(-0.02, 0.02),
+            "SHIBUSDT": 0.000025 + random.uniform(-0.000005, 0.000005),
+            "DOTUSDT": 20 + random.uniform(-5, 5),
+            "LINKUSDT": 15 + random.uniform(-3, 3),
+            "LTCUSDT": 180 + random.uniform(-30, 30),
+            "XRPUSDT": 0.6 + random.uniform(-0.1, 0.1),
+            "UNIUSDT": 25 + random.uniform(-5, 5),
+            "SOLUSDT": 100 + random.uniform(-20, 20),
+            "MATICUSDT": 1.2 + random.uniform(-0.3, 0.3),
+            "AVAXUSDT": 80 + random.uniform(-15, 15),
+            "ATOMUSDT": 12 + random.uniform(-3, 3),
         }
+        
+        # Saldos simulados
+        self.simulated_balances = [
+            {"asset": "USDT", "free": "100.00000000", "locked": "0.00000000"},
+            {"asset": "BTC", "free": "0.00100000", "locked": "0.00000000"},
+            {"asset": "ETH", "free": "0.01000000", "locked": "0.00000000"},
+            {"asset": "BNB", "free": "0.50000000", "locked": "0.00000000"},
+        ]
     
     def test_connection(self):
-        """Simula teste de conexão"""
-        self.logger.info("Simulação: Teste de conexão bem-sucedido")
+        """Simula teste de conexão sempre bem-sucedido"""
+        self.logger.info("Simulador: Teste de conexão bem-sucedido")
         return True
-        
+    
     def get_account_info(self):
-        """Retorna informações simuladas da conta"""
-        self.logger.info("Simulação: Obtendo informações da conta")
-        balances = []
-        for asset, amount in self.simulated_balance.items():
-            balances.append({
-                "asset": asset,
-                "free": str(amount * 0.8),  # 80% livre
-                "locked": str(amount * 0.2)  # 20% em ordens
-            })
-        
-        return {"balances": balances, "updateTime": int(time.time() * 1000)}
-        
+        """Simula informações da conta"""
+        self.logger.info("Simulador: Obtendo informações da conta")
+        return {
+            "makerCommission": 15,
+            "takerCommission": 15,
+            "buyerCommission": 0,
+            "sellerCommission": 0,
+            "canTrade": True,
+            "canWithdraw": True,
+            "canDeposit": True,
+            "updateTime": int(time.time() * 1000),
+            "balances": self.simulated_balances
+        }
+    
     def get_ticker_price(self, symbol):
-        """Retorna preço simulado para um par"""
-        clean_symbol = format_symbol(symbol)
-        base_price = self.base_prices.get(clean_symbol, 100.0)
-        variation = random.uniform(-0.02, 0.02)
-        price = base_price * (1 + variation)
+        """Simula preço de ticker"""
+        # Remove a barra se existir (BTC/USDT -> BTCUSDT)
+        clean_symbol = symbol.replace("/", "")
         
-        self.logger.info(f"Simulação: Preço de {symbol}: {price:.2f}")
-        return {"symbol": clean_symbol, "price": str(price)}
+        if clean_symbol in self.simulated_prices:
+            # Adiciona pequena variação aleatória para simular movimento de preço
+            base_price = self.simulated_prices[clean_symbol]
+            variation = random.uniform(-0.02, 0.02)  # ±2% de variação
+            current_price = base_price * (1 + variation)
+            
+            self.logger.debug(f"Simulador: Preço de {symbol} = {current_price:.8f}")
+            return {"symbol": clean_symbol, "price": f"{current_price:.8f}"}
+        else:
+            self.logger.warning(f"Simulador: Par {symbol} não disponível em modo simulação")
+            return None
     
     def get_klines(self, symbol, interval, limit=500):
-        """Gera dados de candlestick simulados"""
-        self.logger.info(f"Simulação: Obtendo {limit} candles para {symbol}")
+        """Simula dados de candlestick"""
+        self.logger.debug(f"Simulador: Gerando {limit} candles para {symbol}")
+        
+        # Remove a barra se existir
+        clean_symbol = symbol.replace("/", "")
+        
+        # Preço base ou aleatório se não existir
+        if clean_symbol in self.simulated_prices:
+            base_price = self.simulated_prices[clean_symbol]
+        else:
+            base_price = random.uniform(0.001, 50000)
+        
         klines = []
+        current_time = int(time.time() * 1000)
+        
+        # Intervalo em milissegundos
+        interval_ms = {
+            "1m": 60000,
+            "5m": 300000,
+            "15m": 900000,
+            "1h": 3600000,
+            "4h": 14400000,
+            "1d": 86400000
+        }.get(interval, 3600000)
+        
         for i in range(limit):
-            klines.append([
-                int(time.time() * 1000) - (limit - i) * 60000,  # tempo
-                "100.0",  # open
-                "105.0",  # high
-                "95.0",   # low
-                "102.0",  # close
-                "1000.0", # volume
-                int(time.time() * 1000) - (limit - i - 1) * 60000,  # tempo de fechamento
-                "102000.0",  # volume em quote
-                100,          # número de trades
-                "500.0",      # volume de compra
-                "51000.0",    # volume de compra em quote
-                "0"           # ignore
-            ])
+            timestamp = current_time - (limit - i) * interval_ms
+            
+            # Simula variação de preço
+            price_change = random.uniform(-0.05, 0.05)  # ±5%
+            open_price = base_price * (1 + price_change)
+            close_price = open_price * (1 + random.uniform(-0.03, 0.03))
+            high_price = max(open_price, close_price) * (1 + random.uniform(0, 0.02))
+            low_price = min(open_price, close_price) * (1 - random.uniform(0, 0.02))
+            volume = random.uniform(1000, 100000)
+            
+            kline = [
+                timestamp,                    # Open time
+                f"{open_price:.8f}",         # Open price
+                f"{high_price:.8f}",         # High price
+                f"{low_price:.8f}",          # Low price
+                f"{close_price:.8f}",        # Close price
+                f"{volume:.8f}",             # Volume
+                timestamp + interval_ms - 1, # Close time
+                f"{volume * close_price:.8f}", # Quote asset volume
+                random.randint(100, 1000),   # Number of trades
+                f"{volume * 0.6:.8f}",       # Taker buy base asset volume
+                f"{volume * close_price * 0.6:.8f}", # Taker buy quote asset volume
+                "0"                          # Ignore
+            ]
+            klines.append(kline)
+            
+            # Atualiza preço base para próxima iteração
+            base_price = close_price
+        
         return klines
     
     def create_order(self, symbol, side, type, quantity=None, price=None, time_in_force=None):
-        """Simula a criação de uma ordem"""
-        order_id = self.next_order_id
-        self.next_order_id += 1
+        """Simula criação de ordem"""
+        order_id = random.randint(1000000, 9999999)
+        self.logger.info(f"Simulador: Ordem {side} {type} criada para {symbol} (ID: {order_id})")
         
-        self.logger.info(f"Simulação: Criando ordem {side} para {symbol} - {quantity}@{price}")
-        
-        order = {
+        return {
+            "symbol": symbol.replace("/", ""),
             "orderId": order_id,
-            "symbol": format_symbol(symbol),
+            "orderListId": -1,
+            "clientOrderId": f"sim_{int(time.time())}",
+            "transactTime": int(time.time() * 1000),
+            "price": str(price) if price else "0.00000000",
+            "origQty": str(quantity) if quantity else "0.00000000",
+            "executedQty": str(quantity) if quantity else "0.00000000",
+            "cummulativeQuoteQty": "0.00000000",
             "status": "FILLED",
-            "price": str(price) if price else "0.0",
-            "origQty": str(quantity) if quantity else "0.0",
+            "timeInForce": time_in_force or "GTC",
+            "type": type.upper(),
             "side": side.upper(),
-            "type": type.upper()
+            "fills": []
         }
-        
-        self.orders[order_id] = order
-        return order
-    
-    def get_order(self, symbol, order_id):
-        """Retorna informações sobre uma ordem simulada"""
-        if order_id in self.orders:
-            return self.orders[order_id]
-        else:
-            raise ValueError(f"Ordem {order_id} não encontrada")
     
     def get_exchange_info(self):
-        """Retorna informações simuladas sobre a exchange"""
-        return {"serverTime": int(time.time() * 1000)}
+        """Simula informações de exchange"""
+        symbols = []
+        for symbol in self.simulated_prices.keys():
+            symbols.append({
+                "symbol": symbol,
+                "status": "TRADING",
+                "baseAsset": symbol[:-4],  # Remove USDT
+                "quoteAsset": "USDT",
+                "isSpotTradingAllowed": True,
+                "isMarginTradingAllowed": True
+            })
+        
+        return {
+            "timezone": "UTC",
+            "serverTime": int(time.time() * 1000),
+            "symbols": symbols
+        }
     
-    def get_server_time(self):
-        """Retorna o tempo simulado do servidor"""
-        return {"serverTime": int(time.time() * 1000)}
+    def validate_trading_pairs(self, pairs):
+        """Valida pares de trading simulados"""
+        valid_pairs = []
+        for pair in pairs:
+            clean_pair = pair.replace("/", "") + "USDT"
+            if clean_pair.replace("USDT", "") + "USDT" in self.simulated_prices:
+                valid_pairs.append(pair)
+            else:
+                self.logger.warning(f"Simulador: Par {pair} não disponível")
+        return valid_pairs

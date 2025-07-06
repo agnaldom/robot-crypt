@@ -5,8 +5,9 @@ import requests
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-from core.config import settings
-from core.logging_setup import logger
+from src.core.config import settings
+from src.core.logging_setup import logger
+from src.core.validators import validate_url_security
 
 
 class NewsAPIException(Exception):
@@ -31,7 +32,7 @@ class NewsAPI:
 
     def _request(self, endpoint: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Perform a GET request to the News API.
+        Perform a secure GET request to the News API.
 
         Args:
             endpoint (str): API endpoint path.
@@ -41,20 +42,56 @@ class NewsAPI:
             Dict[str, Any]: Response data.
 
         Raises:
-            NewsAPIException: If the request fails.
+            NewsAPIException: If the request fails or URL is not secure.
         """
         url = f"{self.base_url}/{endpoint}"
+        
+        # Validar URL para prevenir ataques SSRF
+        allowed_domains = ['newsapi.org', 'api.newsapi.org']
+        if not validate_url_security(url, allowed_domains):
+            logger.error(f"URL blocked for security reasons: {url}")
+            raise NewsAPIException(f"URL not allowed: {url}")
+        
         params = params or {}
         params["apiKey"] = self.api_key
+        
+        # Headers seguros
+        headers = {
+            'User-Agent': 'Robot-Crypt/1.0',
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'close'  # Evitar connection reuse
+        }
 
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(
+                url, 
+                params=params,
+                headers=headers,
+                timeout=10,  # Timeout de 10 segundos
+                verify=True,  # Sempre verificar certificados SSL
+                allow_redirects=False  # Não permitir redirects automáticos
+            )
             response.raise_for_status()
+        except requests.Timeout:
+            logger.error(f"News API request timeout: {url}")
+            raise NewsAPIException("Request timeout")
         except requests.RequestException as e:
             logger.error(f"News API request failed: {e}")
             raise NewsAPIException(f"Request failed: {e}")
 
-        data = response.json()
+        # Verificar content-type
+        content_type = response.headers.get('content-type', '')
+        if 'application/json' not in content_type:
+            logger.error(f"Invalid content type: {content_type}")
+            raise NewsAPIException("Invalid response content type")
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            logger.error(f"Invalid JSON response: {e}")
+            raise NewsAPIException("Invalid JSON response")
+            
         if data.get("status") != "ok":
             logger.error(f"News API error: {data.get('message', 'Unknown error')}")
             raise NewsAPIException(f"API error: {data.get('message', 'Unknown error')}")

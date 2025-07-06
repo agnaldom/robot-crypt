@@ -4,6 +4,7 @@ Reports router for Robot-Crypt API.
 
 from typing import Any, List, Optional
 from datetime import datetime
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import FileResponse
@@ -16,6 +17,7 @@ from src.schemas.report import (
     ReportTemplate, ReportSummary
 )
 from src.schemas.user import User
+from src.services.report_service import ReportService
 
 router = APIRouter()
 
@@ -32,9 +34,19 @@ async def read_reports(
     """
     Retrieve reports with optional filters.
     """
-    # TODO: Implement ReportService
-    # For now, return mock data
-    return []
+    report_service = ReportService(db)
+    
+    # Non-superuser can only see their own reports
+    user_id = None if current_user.is_superuser else current_user.id
+    
+    reports = await report_service.list_reports(
+        user_id=user_id,
+        report_type=report_type,
+        format=format,
+        limit=limit,
+        offset=skip
+    )
+    return reports
 
 
 @router.post("/", response_model=Report)
@@ -46,12 +58,20 @@ async def create_report(
     """
     Create new report.
     """
-    # TODO: Implement ReportService
-    # Set user_id to current user if not superuser
-    if not current_user.is_superuser:
-        report_in.user_id = current_user.id
+    report_service = ReportService(db)
     
-    raise HTTPException(status_code=501, detail="Not implemented yet")
+    # Set user_id to current user
+    user_id = current_user.id
+    
+    report = await report_service.create_report(
+        user_id=user_id,
+        title=report_in.title,
+        report_type=report_in.type,
+        format=report_in.format,
+        content=report_in.content,
+        parameters=report_in.parameters
+    )
+    return report
 
 
 @router.post("/generate", response_model=dict)
@@ -63,27 +83,64 @@ async def generate_report(
     """
     Generate a new report with specified parameters.
     """
-    # TODO: Implement report generation logic
-    # This would typically involve:
-    # 1. Validate parameters
-    # 2. Fetch required data from database
-    # 3. Generate report content
-    # 4. Save to file system or database
-    # 5. Return report info
+    report_service = ReportService(db)
     
-    # Mock report generation
-    report_id = f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Generate report based on type
+    if report_request.report_type == "performance":
+        report = await report_service.generate_performance_report(
+            user_id=current_user.id,
+            title=report_request.title or "Performance Report",
+            parameters=report_request.parameters
+        )
+    elif report_request.report_type == "trade_history":
+        start_date = None
+        end_date = None
+        if report_request.parameters:
+            start_date_str = report_request.parameters.get("start_date")
+            end_date_str = report_request.parameters.get("end_date")
+            if start_date_str:
+                start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+            if end_date_str:
+                end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+        
+        report = await report_service.generate_trade_history_report(
+            user_id=current_user.id,
+            title=report_request.title or "Trade History Report",
+            start_date=start_date,
+            end_date=end_date,
+            parameters=report_request.parameters
+        )
+    elif report_request.report_type == "risk_analysis":
+        report = await report_service.generate_risk_analysis_report(
+            user_id=current_user.id,
+            title=report_request.title or "Risk Analysis Report",
+            parameters=report_request.parameters
+        )
+    else:
+        # Generic report creation
+        report = await report_service.create_report(
+            user_id=current_user.id,
+            title=report_request.title or f"{report_request.report_type.title()} Report",
+            report_type=report_request.report_type,
+            format=report_request.format,
+            parameters=report_request.parameters
+        )
+    
+    # Save report to file if requested format is not JSON
+    file_path = None
+    if report_request.format != "json":
+        file_path = await report_service.save_report_to_file(report.id, report_request.format)
     
     return {
-        "report_id": report_id,
+        "report_id": report.id,
         "status": "generated",
-        "type": report_request.report_type,
-        "format": report_request.format,
-        "title": report_request.title or f"{report_request.report_type.title()} Report",
-        "generated_at": datetime.now().isoformat(),
-        "file_size": "2.5 MB",
-        "download_url": f"/reports/{report_id}/download",
-        "expires_at": "2024-01-01T00:00:00Z"
+        "type": report.type,
+        "format": report.format,
+        "title": report.title,
+        "generated_at": report.created_at.isoformat(),
+        "file_path": file_path,
+        "download_url": f"/reports/{report.id}/download",
+        "content_length": len(report.content) if report.content else 0
     }
 
 
@@ -97,8 +154,12 @@ async def read_my_reports(
     """
     Get current user's reports.
     """
-    # TODO: Implement ReportService
-    return []
+    report_service = ReportService(db)
+    reports = await report_service.get_reports_by_user(
+        user_id=current_user.id,
+        limit=limit
+    )
+    return reports[skip:skip+limit]
 
 
 @router.get("/templates", response_model=List[ReportTemplate])
@@ -164,35 +225,31 @@ async def get_reports_summary(
     """
     Get reports summary and statistics.
     """
-    # TODO: Implement actual summary calculation
+    report_service = ReportService(db)
+    
+    # Get actual statistics
+    stats = await report_service.get_report_statistics(current_user.id)
+    
+    # Get recent reports
+    recent_reports = await report_service.get_reports_by_user(
+        user_id=current_user.id,
+        limit=5
+    )
+    
     return ReportSummary(
-        total_reports=25,
-        reports_by_type={
-            "performance": 10,
-            "trade_history": 8,
-            "risk_analysis": 4,
-            "portfolio": 3
-        },
-        reports_by_format={
-            "pdf": 15,
-            "csv": 8,
-            "json": 2
-        },
+        total_reports=stats["total_reports"],
+        reports_by_type=stats["report_types"],
+        reports_by_format=stats["formats"],
         recent_reports=[
             {
-                "id": 1,
-                "title": "Monthly Performance - December 2023",
-                "type": "performance",
-                "created_at": "2023-12-31T23:59:59Z"
-            },
-            {
-                "id": 2,
-                "title": "Trade History - Q4 2023",
-                "type": "trade_history",
-                "created_at": "2023-12-30T10:00:00Z"
+                "id": report.id,
+                "title": report.title,
+                "type": report.type,
+                "created_at": report.created_at.isoformat()
             }
+            for report in recent_reports
         ],
-        storage_used=45.2
+        storage_used=sum(len(r.content or "") for r in recent_reports) / 1024 / 1024  # MB
     )
 
 
@@ -205,8 +262,17 @@ async def read_report(
     """
     Get report by ID.
     """
-    # TODO: Implement ReportService with ownership check
-    raise HTTPException(status_code=404, detail="Report not found")
+    report_service = ReportService(db)
+    report = await report_service.get_report_by_id(report_id)
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    # Check ownership if not superuser
+    if not current_user.is_superuser and report.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return report
 
 
 @router.put("/{report_id}", response_model=Report)
@@ -219,8 +285,27 @@ async def update_report(
     """
     Update a report.
     """
-    # TODO: Implement ReportService with ownership check
-    raise HTTPException(status_code=404, detail="Report not found")
+    report_service = ReportService(db)
+    
+    # Check if report exists and user has permission
+    existing_report = await report_service.get_report_by_id(report_id)
+    if not existing_report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    if not current_user.is_superuser and existing_report.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    report = await report_service.update_report(
+        report_id=report_id,
+        title=report_in.title,
+        content=report_in.content,
+        parameters=report_in.parameters
+    )
+    
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return report
 
 
 @router.delete("/{report_id}", response_model=Report)
@@ -232,8 +317,22 @@ async def delete_report(
     """
     Delete a report.
     """
-    # TODO: Implement ReportService with ownership check
-    raise HTTPException(status_code=404, detail="Report not found")
+    report_service = ReportService(db)
+    
+    # Check if report exists and user has permission
+    existing_report = await report_service.get_report_by_id(report_id)
+    if not existing_report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    if not current_user.is_superuser and existing_report.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    success = await report_service.delete_report(report_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return existing_report
 
 
 @router.get("/{report_id}/download")
@@ -245,13 +344,47 @@ async def download_report(
     """
     Download a report file.
     """
-    # TODO: Implement report download
-    # This would typically:
-    # 1. Check report exists and user has access
-    # 2. Check if file exists on disk
-    # 3. Return file response with appropriate headers
+    report_service = ReportService(db)
     
-    raise HTTPException(status_code=404, detail="Report file not found")
+    # Check if report exists and user has permission
+    report = await report_service.get_report_by_id(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    if not current_user.is_superuser and report.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Try to get report content
+    content = await report_service.get_report_content(report_id)
+    
+    if not content:
+        raise HTTPException(status_code=404, detail="Report content not found")
+    
+    # If file exists on disk, return FileResponse
+    if report.file_path and os.path.exists(report.file_path):
+        return FileResponse(
+            path=report.file_path,
+            filename=f"{report.title}.{report.format}",
+            media_type='application/octet-stream'
+        )
+    
+    # Otherwise, return content as response
+    from fastapi.responses import Response
+    
+    if report.format == "json":
+        media_type = "application/json"
+    elif report.format == "csv":
+        media_type = "text/csv"
+    elif report.format == "pdf":
+        media_type = "application/pdf"
+    else:
+        media_type = "application/octet-stream"
+    
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={report.title}.{report.format}"}
+    )
 
 
 @router.post("/bulk-generate", response_model=dict)
@@ -263,22 +396,64 @@ async def bulk_generate_reports(
     """
     Generate multiple reports in bulk (admin only).
     """
-    # TODO: Implement bulk report generation
-    # This would typically:
-    # 1. Validate all requests
-    # 2. Queue report generation jobs
-    # 3. Return job IDs for tracking
+    report_service = ReportService(db)
     
-    job_ids = []
+    generated_reports = []
+    failed_reports = []
+    
     for i, request in enumerate(report_requests):
-        job_id = f"bulk_job_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{i}"
-        job_ids.append(job_id)
+        try:
+            # Generate each report
+            if request.report_type == "performance":
+                report = await report_service.generate_performance_report(
+                    user_id=current_user.id,
+                    title=request.title or f"Bulk Performance Report {i+1}",
+                    parameters=request.parameters
+                )
+            elif request.report_type == "trade_history":
+                report = await report_service.generate_trade_history_report(
+                    user_id=current_user.id,
+                    title=request.title or f"Bulk Trade History Report {i+1}",
+                    parameters=request.parameters
+                )
+            elif request.report_type == "risk_analysis":
+                report = await report_service.generate_risk_analysis_report(
+                    user_id=current_user.id,
+                    title=request.title or f"Bulk Risk Analysis Report {i+1}",
+                    parameters=request.parameters
+                )
+            else:
+                report = await report_service.create_report(
+                    user_id=current_user.id,
+                    title=request.title or f"Bulk {request.report_type.title()} Report {i+1}",
+                    report_type=request.report_type,
+                    format=request.format,
+                    parameters=request.parameters
+                )
+            
+            generated_reports.append({
+                "report_id": report.id,
+                "title": report.title,
+                "type": report.type,
+                "status": "generated"
+            })
+            
+        except Exception as e:
+            failed_reports.append({
+                "index": i,
+                "title": request.title or f"Report {i+1}",
+                "error": str(e),
+                "status": "failed"
+            })
     
     return {
-        "status": "queued",
-        "total_reports": len(report_requests),
-        "job_ids": job_ids,
-        "estimated_completion": "2023-01-01T01:00:00Z"
+        "status": "completed",
+        "total_requested": len(report_requests),
+        "successful": len(generated_reports),
+        "failed": len(failed_reports),
+        "generated_reports": generated_reports,
+        "failed_reports": failed_reports,
+        "completed_at": datetime.now().isoformat()
     }
 
 
