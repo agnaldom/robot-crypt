@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, Boolean, DateTime, Foreig
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioAlert(Base):
@@ -10,6 +10,7 @@ class PortfolioAlert(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True)  # Optional, can be for entire portfolio
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=True)  # Optional, can be for entire portfolio
     
     # Alert configuration
@@ -45,4 +46,5 @@ class PortfolioAlert(Base):
     
     # Relationships
     user = relationship("User", back_populates="portfolio_alerts")
+    portfolio = relationship("Portfolio", back_populates="alerts")
     asset = relationship("Asset", back_populates="portfolio_alerts")

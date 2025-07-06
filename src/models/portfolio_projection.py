@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, JSO
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioProjection(Base):
@@ -10,6 +10,7 @@ class PortfolioProjection(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True)  # Optional, can be for specific portfolio
     
     # Projection configuration
     scenario_type = Column(String, nullable=False)  # optimistic, pessimistic, realistic, custom
@@ -44,3 +45,4 @@ class PortfolioProjection(Base):
     
     # Relationships
     user = relationship("User", back_populates="portfolio_projections")
+    portfolio = relationship("Portfolio", back_populates="projections")

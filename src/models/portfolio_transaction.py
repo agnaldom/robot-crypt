@@ -2,13 +2,14 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, Tex
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioTransaction(Base):
     __tablename__ = "portfolio_transactions"
     
     id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     
@@ -25,7 +26,7 @@ class PortfolioTransaction(Base):
     
     # Additional info
     notes = Column(Text, nullable=True)
-    metadata = Column(JSON, default={})
+    transaction_metadata = Column(JSON, default={})
     
     # External references
     external_id = Column(String, nullable=True)  # Reference to exchange transaction ID
@@ -36,5 +37,6 @@ class PortfolioTransaction(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # Record creation time
     
     # Relationships
+    portfolio = relationship("Portfolio", back_populates="transactions")
     user = relationship("User", back_populates="portfolio_transactions")
     asset = relationship("Asset")

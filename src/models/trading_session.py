@@ -139,7 +139,7 @@ class TradingSessionLog(Base):
     event_type = Column(String(50))  # trade_executed, signal_generated, error, etc.
     
     # Additional data
-    metadata = Column(JSON, default=dict)
+    log_metadata = Column(JSON, default=dict)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -188,7 +188,7 @@ class OpenOrder(Base):
     
     # Metadata
     notes = Column(Text)
-    metadata = Column(JSON, default=dict)
+    order_metadata = Column(JSON, default=dict)
     
     # Relationships
     user = relationship("User")

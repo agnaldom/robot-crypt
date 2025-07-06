@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 
 
 # Shared properties
@@ -40,8 +40,7 @@ class UserInDBBase(UserBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Properties to return via API

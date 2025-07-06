@@ -139,7 +139,7 @@ class Trade(Base):
     profit_loss = Column(Float, nullable=True)
     profit_loss_percentage = Column(Float, nullable=True)
     notes = Column(Text)
-    metadata = Column(JSON, default={})
+    trade_metadata = Column(JSON, default={})
     executed_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships

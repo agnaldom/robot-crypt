@@ -24,6 +24,7 @@ class User(Base):
     reports = relationship("Report", back_populates="user")
     
     # Portfolio relationships
+    portfolio_positions = relationship("PortfolioPosition", back_populates="user")
     portfolio_snapshots = relationship("PortfolioSnapshot", back_populates="user")
     portfolio_transactions = relationship("PortfolioTransaction", back_populates="user")
     portfolio_metrics = relationship("PortfolioMetric", back_populates="user")
@@ -33,8 +34,6 @@ class User(Base):
     
     # Legacy relationships (may be removed in future)
     portfolios = relationship("Portfolio", back_populates="owner")
-    transactions = relationship("Transaction", back_populates="user")
-    risk_profiles = relationship("RiskProfile", back_populates="user")
     trades = relationship("Trade", back_populates="user")
     
     def __repr__(self):

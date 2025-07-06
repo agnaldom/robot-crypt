@@ -4,7 +4,7 @@ Trading session schemas for Robot-Crypt application.
 
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from enum import Enum
 
 from src.models.trading_session import TradingSessionStatus, TradingStrategy
@@ -90,9 +90,9 @@ class TradingSessionResponse(TradingSessionBase):
     # Duration in minutes
     duration_minutes: Optional[int] = None
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class TradingSessionSummary(BaseModel):
     """Trading session summary schema."""
@@ -108,13 +108,13 @@ class TradingSessionSummary(BaseModel):
     created_at: datetime
     is_simulation: bool
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class TradingSessionLogCreate(BaseModel):
     """Trading session log creation schema."""
-    level: str = Field(..., regex=r'^(DEBUG|INFO|WARNING|ERROR)$')
+    level: str = Field(..., pattern=r'^(DEBUG|INFO|WARNING|ERROR)$')
     message: str = Field(..., min_length=1)
     event_type: Optional[str] = None
     metadata: Dict[str, Any] = {}
@@ -130,15 +130,15 @@ class TradingSessionLogResponse(BaseModel):
     metadata: Dict[str, Any] = {}
     created_at: datetime
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class OpenOrderBase(BaseModel):
     """Base open order schema."""
     asset_id: int
-    order_type: str = Field(..., regex=r'^(market|limit|stop_loss|take_profit)$')
-    side: str = Field(..., regex=r'^(buy|sell)$')
+    order_type: str = Field(..., pattern=r'^(market|limit|stop_loss|take_profit)$')
+    side: str = Field(..., pattern=r'^(buy|sell)$')
     quantity: float = Field(..., gt=0)
     price: Optional[float] = Field(None, gt=0)
     stop_price: Optional[float] = Field(None, gt=0)
@@ -146,16 +146,17 @@ class OpenOrderBase(BaseModel):
     # Risk management
     stop_loss: Optional[float] = Field(None, gt=0)
     take_profit: Optional[float] = Field(None, gt=0)
-    time_in_force: str = Field("GTC", regex=r'^(GTC|IOC|FOK)$')
+    time_in_force: str = Field("GTC", pattern=r'^(GTC|IOC|FOK)$')
     
     # Metadata
     notes: Optional[str] = None
     metadata: Dict[str, Any] = {}
     
-    @validator('remaining_quantity', pre=True, always=True)
-    def set_remaining_quantity(cls, v, values):
+    @field_validator('remaining_quantity', mode='before')
+    @classmethod
+    def set_remaining_quantity(cls, v, info):
         if v is None:
-            return values.get('quantity', 0)
+            return info.data.get('quantity', 0)
         return v
 
 
@@ -171,7 +172,7 @@ class OpenOrderUpdate(BaseModel):
     stop_price: Optional[float] = Field(None, gt=0)
     stop_loss: Optional[float] = Field(None, gt=0)
     take_profit: Optional[float] = Field(None, gt=0)
-    time_in_force: Optional[str] = Field(None, regex=r'^(GTC|IOC|FOK)$')
+    time_in_force: Optional[str] = Field(None, pattern=r'^(GTC|IOC|FOK)$')
     notes: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     expires_at: Optional[datetime] = None
@@ -202,13 +203,13 @@ class OpenOrderResponse(OpenOrderBase):
     total_value: float
     is_active: bool
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class SessionControlRequest(BaseModel):
     """Trading session control request schema."""
-    action: str = Field(..., regex=r'^(start|pause|stop|resume)$')
+    action: str = Field(..., pattern=r'^(start|pause|stop|resume)$')
     reason: Optional[str] = None
 
 
@@ -232,9 +233,9 @@ class SessionPerformanceMetrics(BaseModel):
     average_win: float = 0.0
     average_loss: float = 0.0
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class SessionRiskMetrics(BaseModel):
     """Trading session risk metrics schema."""
@@ -249,16 +250,17 @@ class SessionRiskMetrics(BaseModel):
     var_95: Optional[float] = None  # Value at Risk 95%
     var_99: Optional[float] = None  # Value at Risk 99%
     
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(
+        from_attributes=True
+    )
 
 class BulkOrderCreate(BaseModel):
     """Bulk order creation schema."""
     orders: List[OpenOrderCreate] = Field(..., min_items=1, max_items=100)
     session_id: Optional[int] = None
     
-    @validator('orders')
+    @field_validator('orders')
+    @classmethod
     def validate_orders(cls, v):
         if len(v) == 0:
             raise ValueError('At least one order is required')

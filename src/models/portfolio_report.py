@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioReport(Base):
@@ -10,6 +10,7 @@ class PortfolioReport(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True)  # Optional, can be for specific portfolio
     
     # Report details
     title = Column(String, nullable=False)
@@ -35,3 +36,4 @@ class PortfolioReport(Base):
     
     # Relationships
     user = relationship("User", back_populates="portfolio_reports")
+    portfolio = relationship("Portfolio", back_populates="reports")

@@ -2,13 +2,14 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, Boo
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioAsset(Base):
     __tablename__ = "portfolio_assets"
     
     id = Column(Integer, primary_key=True, index=True)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=False)
     snapshot_id = Column(Integer, ForeignKey("portfolio_snapshots.id"), nullable=False)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     
@@ -36,5 +37,6 @@ class PortfolioAsset(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
+    portfolio = relationship("Portfolio", back_populates="assets")
     snapshot = relationship("PortfolioSnapshot", back_populates="assets")
     asset = relationship("Asset", back_populates="portfolio_assets")

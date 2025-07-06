@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, JSO
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioMetric(Base):
@@ -10,6 +10,7 @@ class PortfolioMetric(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True)  # Optional, can be for specific portfolio
     
     # Time period
     period_type = Column(String, nullable=False)  # daily, weekly, monthly, yearly, all_time
@@ -44,3 +45,4 @@ class PortfolioMetric(Base):
     
     # Relationships
     user = relationship("User", back_populates="portfolio_metrics")
+    portfolio = relationship("Portfolio", back_populates="metrics")

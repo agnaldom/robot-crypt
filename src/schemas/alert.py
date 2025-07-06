@@ -5,12 +5,11 @@ Alert schemas for Robot-Crypt API.
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class AlertBase(BaseModel):
     """Base alert schema."""
-    user_id: int = Field(..., description="User ID")
     asset_id: Optional[int] = Field(None, description="Asset ID (optional)")
     alert_type: str = Field(..., description="Alert type (price, technical, macro, risk)")
     message: str = Field(..., description="Alert message")
@@ -36,12 +35,12 @@ class AlertUpdate(BaseModel):
 class Alert(AlertBase):
     """Schema for alert returned in API responses."""
     id: int
+    user_id: int
     is_triggered: bool
     created_at: datetime
     triggered_at: Optional[datetime]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AlertTrigger(BaseModel):

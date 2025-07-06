@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # Portfolio Snapshot Schemas
@@ -39,8 +39,7 @@ class PortfolioAssetInDB(PortfolioAssetBase):
     snapshot_id: int
     updated_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Portfolio Snapshot Schemas
@@ -83,8 +82,7 @@ class PortfolioSnapshotInDB(PortfolioSnapshotBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PortfolioSnapshotWithAssets(PortfolioSnapshotInDB):
@@ -108,7 +106,8 @@ class PortfolioTransactionBase(BaseModel):
     external_source: Optional[str] = None
     executed_at: datetime
     
-    @validator("transaction_type")
+    @field_validator("transaction_type")
+    @classmethod
     def validate_transaction_type(cls, v):
         if v not in ["buy", "sell"]:
             raise ValueError("Transaction type must be 'buy' or 'sell'")
@@ -137,8 +136,7 @@ class PortfolioTransactionInDB(PortfolioTransactionBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Portfolio Metric Schemas
@@ -163,7 +161,8 @@ class PortfolioMetricBase(BaseModel):
     win_rate: Optional[float] = None
     additional_metrics: Dict[str, Any] = {}
     
-    @validator("period_type")
+    @field_validator("period_type")
+    @classmethod
     def validate_period_type(cls, v):
         valid_types = ["daily", "weekly", "monthly", "yearly", "all_time"]
         if v not in valid_types:
@@ -200,8 +199,7 @@ class PortfolioMetricInDB(PortfolioMetricBase):
     id: int
     calculated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Portfolio Alert Schemas
@@ -224,21 +222,24 @@ class PortfolioAlertBase(BaseModel):
     cool_down_minutes: int = 0
     additional_config: Dict[str, Any] = {}
     
-    @validator("alert_type")
+    @field_validator("alert_type")
+    @classmethod
     def validate_alert_type(cls, v):
         valid_types = ["price", "value", "percentage", "risk"]
         if v not in valid_types:
             raise ValueError(f"Alert type must be one of {valid_types}")
         return v
     
-    @validator("alert_level")
+    @field_validator("alert_level")
+    @classmethod
     def validate_alert_level(cls, v):
         valid_levels = ["info", "warning", "danger"]
         if v not in valid_levels:
             raise ValueError(f"Alert level must be one of {valid_levels}")
         return v
     
-    @validator("condition_type")
+    @field_validator("condition_type")
+    @classmethod
     def validate_condition_type(cls, v):
         valid_conditions = ["above", "below", "equals"]
         if v not in valid_conditions:
@@ -274,8 +275,7 @@ class PortfolioAlertInDB(PortfolioAlertBase):
     created_at: datetime
     last_triggered_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Portfolio Projection Schemas
@@ -298,14 +298,16 @@ class PortfolioProjectionBase(BaseModel):
     title: str
     description: Optional[str] = None
     
-    @validator("scenario_type")
+    @field_validator("scenario_type")
+    @classmethod
     def validate_scenario_type(cls, v):
         valid_types = ["optimistic", "pessimistic", "realistic", "custom"]
         if v not in valid_types:
             raise ValueError(f"Scenario type must be one of {valid_types}")
         return v
     
-    @validator("time_unit")
+    @field_validator("time_unit")
+    @classmethod
     def validate_time_unit(cls, v):
         valid_units = ["days", "months", "years"]
         if v not in valid_units:
@@ -340,8 +342,51 @@ class PortfolioProjectionInDB(PortfolioProjectionBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Portfolio Position Schemas (Simple positions for API)
+class PortfolioPositionBase(BaseModel):
+    symbol: str
+    quantity: float = Field(..., gt=0, description="Quantity must be positive")
+    average_price: float = Field(..., gt=0, description="Average price must be positive")
+    current_price: float = Field(..., gt=0, description="Current price must be positive")
+
+
+class PortfolioPositionCreate(PortfolioPositionBase):
+    pass
+
+
+class PortfolioPositionUpdate(BaseModel):
+    quantity: Optional[float] = Field(None, gt=0, description="Quantity must be positive")
+    average_price: Optional[float] = Field(None, gt=0, description="Average price must be positive")
+    current_price: Optional[float] = Field(None, gt=0, description="Current price must be positive")
+
+
+class PortfolioPositionInDB(PortfolioPositionBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    
+    model_config = ConfigDict(from_attributes=True)
+
+
+# Portfolio Summary Schemas
+class PortfolioSummary(BaseModel):
+    total_value: float
+    total_profit_loss: float
+    total_profit_loss_percentage: float
+    positions: List[PortfolioPositionInDB]
+
+
+class PortfolioPerformance(BaseModel):
+    total_invested: float
+    current_value: float
+    total_profit_loss: float
+    total_profit_loss_percentage: float
+    best_performing_asset: Optional[str] = None
+    worst_performing_asset: Optional[str] = None
 
 
 # Portfolio Report Schemas
@@ -359,21 +404,24 @@ class PortfolioReportBase(BaseModel):
     is_scheduled: bool = False
     schedule_frequency: Optional[str] = None
     
-    @validator("report_type")
+    @field_validator("report_type")
+    @classmethod
     def validate_report_type(cls, v):
         valid_types = ["summary", "performance", "transactions", "tax", "custom"]
         if v not in valid_types:
             raise ValueError(f"Report type must be one of {valid_types}")
         return v
     
-    @validator("format")
+    @field_validator("format")
+    @classmethod
     def validate_format(cls, v):
         valid_formats = ["pdf", "csv", "json"]
         if v not in valid_formats:
             raise ValueError(f"Format must be one of {valid_formats}")
         return v
     
-    @validator("period_type")
+    @field_validator("period_type")
+    @classmethod
     def validate_period_type(cls, v):
         valid_types = ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"]
         if v not in valid_types:
@@ -403,5 +451,4 @@ class PortfolioReportInDB(PortfolioReportBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

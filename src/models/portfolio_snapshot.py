@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, DateTime, JSON, ForeignKey, Strin
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from app.db.database import Base
+from src.database.database import Base
 
 
 class PortfolioSnapshot(Base):
@@ -10,6 +10,7 @@ class PortfolioSnapshot(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    portfolio_id = Column(Integer, ForeignKey("portfolios.id"), nullable=True)
     
     # Portfolio totals
     total_invested_value = Column(Float, nullable=False)
@@ -38,4 +39,5 @@ class PortfolioSnapshot(Base):
     
     # Relationships
     user = relationship("User", back_populates="portfolio_snapshots")
+    portfolio = relationship("Portfolio", back_populates="snapshots")
     assets = relationship("PortfolioAsset", back_populates="snapshot", cascade="all, delete-orphan")
