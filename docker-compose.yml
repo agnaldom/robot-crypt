@@ -1,25 +1,105 @@
 version: '3.8'
 
 services:
+  # API Service - FastAPI
   api:
     build:
       context: .
       dockerfile: Dockerfile
       target: production
+    container_name: robot-crypt-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/robot_crypt
+      - DEBUG=false
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SIMULATION_MODE=true
+      - USE_TESTNET=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["api"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    networks:
+      - robot-crypt-network
+
+  # Trading Bot Service
+  robot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: robot-crypt-bot
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/robot_crypt
+      - SECRET_KEY=dev-secret-key-change-in-production
+      - SIMULATION_MODE=true
+      - USE_TESTNET=false
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["robot"]
+    restart: unless-stopped
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    networks:
+      - robot-crypt-network
+    profiles:
+      - bot
+
+  # Development service with hot reload
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: robot-crypt-dev
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:password@db:5432/robot_crypt
       - DEBUG=true
       - SECRET_KEY=dev-secret-key-change-in-production
+      - SIMULATION_MODE=true
+      - USE_TESTNET=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      - RELOAD_FLAG=--reload
+      - REDIS_URL=redis://redis:6379
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["api"]
+    restart: unless-stopped
     volumes:
       - .:/app
-    restart: unless-stopped
+      - ./logs:/app/logs
+      - ./data:/app/data
     networks:
       - robot-crypt-network
+    profiles:
+      - dev
 
   db:
     image: postgres:15-alpine
@@ -44,15 +124,17 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: robot-crypt-redis
     ports:
       - "6379:6379"
+    command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
     networks:
       - robot-crypt-network
