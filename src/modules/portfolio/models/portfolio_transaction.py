@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Float, String, DateTime, ForeignKey, Tex
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
-from backend_new.core.database import Base
+from src.database.database import Base
 
 
 class PortfolioTransaction(Base):

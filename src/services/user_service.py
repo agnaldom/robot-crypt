@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from src.core.security import get_password_hash, verify_password
+# Remove direct import to avoid circular dependency
+# from src.core.security import get_password_hash, verify_password
 from src.models.user import User
 from src.schemas.user import UserCreate, UserUpdate
 
@@ -34,6 +35,8 @@ class UserService:
     
     async def create(self, user_in: UserCreate) -> User:
         """Create a new user."""
+        from src.core.security import get_password_hash  # Delayed import
+        
         db_user = User(
             email=user_in.email,
             hashed_password=get_password_hash(user_in.password),
@@ -58,6 +61,7 @@ class UserService:
         
         # Handle password update
         if "password" in update_data and update_data["password"]:
+            from src.core.security import get_password_hash  # Delayed import
             hashed_password = get_password_hash(update_data["password"])
             del update_data["password"]
             update_data["hashed_password"] = hashed_password
@@ -88,6 +92,7 @@ class UserService:
         if not user:
             return None
         
+        from src.core.security import verify_password  # Delayed import
         if not verify_password(password, user.hashed_password):
             return None
         

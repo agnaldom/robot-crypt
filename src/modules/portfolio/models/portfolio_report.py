@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
 
-from backend_new.core.db.base_class import Base
+from src.database.database import Base
 
 
 class ReportStatusEnum(str, enum.Enum):

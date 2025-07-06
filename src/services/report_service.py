@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
-from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_, or_
 import json
 import os
 from pathlib import Path
@@ -11,7 +11,7 @@ from src.models.user import User
 
 
 class ReportService:
-    def __init__(self, db_session: Session):
+    def __init__(self, db_session: AsyncSession):
         self.db = db_session
         self.reports_directory = Path("reports")
         self.reports_directory.mkdir(exist_ok=True)
@@ -19,7 +19,8 @@ class ReportService:
     # Basic CRUD operations
     async def get_report_by_id(self, report_id: int) -> Optional[Report]:
         """Get report by ID"""
-        return self.db.query(Report).filter(Report.id == report_id).first()
+        result = await self.db.execute(select(Report).where(Report.id == report_id))
+        return result.scalar_one_or_none()
 
     async def get_reports_by_user(
         self, 
@@ -29,15 +30,17 @@ class ReportService:
         limit: int = 50
     ) -> List[Report]:
         """Get reports for a specific user with optional filters"""
-        query = self.db.query(Report).filter(Report.user_id == user_id)
+        conditions = [Report.user_id == user_id]
         
         if report_type:
-            query = query.filter(Report.type == report_type)
+            conditions.append(Report.type == report_type)
         
         if format:
-            query = query.filter(Report.format == format)
+            conditions.append(Report.format == format)
         
-        return query.order_by(Report.created_at.desc()).limit(limit).all()
+        query = select(Report).where(and_(*conditions)).order_by(Report.created_at.desc()).limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all()
 
     async def list_reports(
         self,
@@ -48,18 +51,24 @@ class ReportService:
         offset: int = 0
     ) -> List[Report]:
         """List reports with various filters"""
-        query = self.db.query(Report)
+        conditions = []
         
         if user_id:
-            query = query.filter(Report.user_id == user_id)
+            conditions.append(Report.user_id == user_id)
         
         if report_type:
-            query = query.filter(Report.type == report_type)
+            conditions.append(Report.type == report_type)
         
         if format:
-            query = query.filter(Report.format == format)
+            conditions.append(Report.format == format)
         
-        return query.order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
+        query = select(Report)
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        query = query.order_by(Report.created_at.desc()).offset(offset).limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all()
 
     async def create_report(
         self,
@@ -81,8 +90,8 @@ class ReportService:
         )
         
         self.db.add(report)
-        self.db.commit()
-        self.db.refresh(report)
+        await self.db.commit()
+        await self.db.refresh(report)
         
         return report
 
@@ -94,7 +103,8 @@ class ReportService:
         parameters: Optional[Dict[str, Any]] = None
     ) -> Optional[Report]:
         """Update an existing report"""
-        report = self.db.query(Report).filter(Report.id == report_id).first()
+        result = await self.db.execute(select(Report).where(Report.id == report_id))
+        report = result.scalar_one_or_none()
         
         if not report:
             return None
@@ -108,14 +118,15 @@ class ReportService:
         if parameters is not None:
             report.parameters = parameters
         
-        self.db.commit()
-        self.db.refresh(report)
+        await self.db.commit()
+        await self.db.refresh(report)
         
         return report
 
     async def delete_report(self, report_id: int) -> bool:
         """Delete a report"""
-        report = self.db.query(Report).filter(Report.id == report_id).first()
+        result = await self.db.execute(select(Report).where(Report.id == report_id))
+        report = result.scalar_one_or_none()
         
         if not report:
             return False
@@ -127,8 +138,8 @@ class ReportService:
             except OSError:
                 pass  # File might be already deleted or inaccessible
         
-        self.db.delete(report)
-        self.db.commit()
+        await self.db.delete(report)
+        await self.db.commit()
         
         return True
 
@@ -140,9 +151,6 @@ class ReportService:
         parameters: Optional[Dict[str, Any]] = None
     ) -> Report:
         """Generate a performance report for a user"""
-        # This would typically involve complex calculations
-        # For now, we'll create a basic structure
-        
         report_data = {
             "user_id": user_id,
             "report_type": "performance",
@@ -159,9 +167,6 @@ class ReportService:
                 "transactions": []
             }
         }
-        
-        # You would populate this with actual portfolio data
-        # from portfolio service, trading records, etc.
         
         content = json.dumps(report_data, indent=2)
         
@@ -215,9 +220,6 @@ class ReportService:
             }
         }
         
-        # You would populate this with actual trading data
-        # from trading service, transaction records, etc.
-        
         content = json.dumps(report_data, indent=2)
         
         report = await self.create_report(
@@ -265,9 +267,6 @@ class ReportService:
             }
         }
         
-        # You would populate this with actual risk calculations
-        # from portfolio service, market data, etc.
-        
         content = json.dumps(report_data, indent=2)
         
         report = await self.create_report(
@@ -283,7 +282,8 @@ class ReportService:
 
     async def save_report_to_file(self, report_id: int, format: str = None) -> Optional[str]:
         """Save report content to file and update file_path"""
-        report = self.db.query(Report).filter(Report.id == report_id).first()
+        result = await self.db.execute(select(Report).where(Report.id == report_id))
+        report = result.scalar_one_or_none()
         
         if not report or not report.content:
             return None
@@ -297,24 +297,12 @@ class ReportService:
         file_path = self.reports_directory / filename
         
         try:
-            if file_format == "json":
-                with open(file_path, 'w') as f:
-                    f.write(report.content)
-            elif file_format == "csv":
-                # Convert JSON content to CSV if needed
-                data = json.loads(report.content)
-                # This would require more complex CSV conversion logic
-                with open(file_path, 'w') as f:
-                    f.write(self._convert_to_csv(data))
-            elif file_format == "pdf":
-                # This would require PDF generation logic
-                # For now, save as text
-                with open(file_path, 'w') as f:
-                    f.write(report.content)
+            with open(file_path, 'w') as f:
+                f.write(report.content)
             
             # Update report with file path
             report.file_path = str(file_path)
-            self.db.commit()
+            await self.db.commit()
             
             return str(file_path)
             
@@ -322,40 +310,10 @@ class ReportService:
             print(f"Error saving report to file: {e}")
             return None
 
-    def _convert_to_csv(self, data: Dict[str, Any]) -> str:
-        """Convert JSON data to CSV format (basic implementation)"""
-        # This is a simplified CSV conversion
-        # In practice, you'd want more sophisticated conversion logic
-        import csv
-        import io
-        
-        output = io.StringIO()
-        
-        if "data" in data and isinstance(data["data"], dict):
-            # Extract tabular data from the report
-            for key, value in data["data"].items():
-                if isinstance(value, list) and value:
-                    # Write section header
-                    output.write(f"\n{key.upper()}\n")
-                    
-                    # Write CSV data
-                    if isinstance(value[0], dict):
-                        fieldnames = value[0].keys()
-                        writer = csv.DictWriter(output, fieldnames=fieldnames)
-                        writer.writeheader()
-                        writer.writerows(value)
-                    else:
-                        # Simple list
-                        for item in value:
-                            output.write(f"{item}\n")
-                    
-                    output.write("\n")
-        
-        return output.getvalue()
-
     async def get_report_content(self, report_id: int) -> Optional[str]:
         """Get report content, either from database or file"""
-        report = self.db.query(Report).filter(Report.id == report_id).first()
+        result = await self.db.execute(select(Report).where(Report.id == report_id))
+        report = result.scalar_one_or_none()
         
         if not report:
             return None
@@ -377,101 +335,40 @@ class ReportService:
 
     async def get_report_statistics(self, user_id: int) -> Dict[str, Any]:
         """Get report statistics for a user"""
-        total_reports = self.db.query(Report).filter(Report.user_id == user_id).count()
+        # Total reports
+        total_result = await self.db.execute(
+            select(Report).where(Report.user_id == user_id)
+        )
+        total_reports = len(total_result.scalars().all())
         
         # Count by report type
-        report_types = self.db.query(Report.type).filter(Report.user_id == user_id).distinct().all()
+        types_result = await self.db.execute(
+            select(Report.type).where(Report.user_id == user_id).distinct()
+        )
+        report_types = types_result.scalars().all()
+        
         type_counts = {}
-        for (report_type,) in report_types:
-            count = self.db.query(Report).filter(
-                and_(Report.user_id == user_id, Report.type == report_type)
-            ).count()
-            type_counts[report_type] = count
+        for report_type in report_types:
+            type_result = await self.db.execute(
+                select(Report).where(and_(Report.user_id == user_id, Report.type == report_type))
+            )
+            type_counts[report_type] = len(type_result.scalars().all())
         
         # Count by format
-        formats = self.db.query(Report.format).filter(Report.user_id == user_id).distinct().all()
+        formats_result = await self.db.execute(
+            select(Report.format).where(Report.user_id == user_id).distinct()
+        )
+        formats = formats_result.scalars().all()
+        
         format_counts = {}
-        for (format,) in formats:
-            count = self.db.query(Report).filter(
-                and_(Report.user_id == user_id, Report.format == format)
-            ).count()
-            format_counts[format] = count
+        for format in formats:
+            format_result = await self.db.execute(
+                select(Report).where(and_(Report.user_id == user_id, Report.format == format))
+            )
+            format_counts[format] = len(format_result.scalars().all())
         
         return {
             "total_reports": total_reports,
             "report_types": type_counts,
             "formats": format_counts
         }
-
-    async def cleanup_old_reports(self, days_old: int = 30) -> int:
-        """Delete reports older than specified days"""
-        from datetime import timedelta
-        
-        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
-        
-        old_reports = self.db.query(Report).filter(
-            Report.created_at < cutoff_date
-        ).all()
-        
-        deleted_count = 0
-        for report in old_reports:
-            if await self.delete_report(report.id):
-                deleted_count += 1
-        
-        return deleted_count
-
-    async def bulk_export_reports(
-        self,
-        user_id: int,
-        format: str = "json",
-        report_type: Optional[str] = None
-    ) -> Optional[str]:
-        """Export multiple reports to a single file"""
-        reports = await self.get_reports_by_user(
-            user_id=user_id,
-            report_type=report_type,
-            limit=1000
-        )
-        
-        if not reports:
-            return None
-        
-        # Create export data
-        export_data = {
-            "user_id": user_id,
-            "exported_at": datetime.utcnow().isoformat(),
-            "report_type": report_type,
-            "total_reports": len(reports),
-            "reports": []
-        }
-        
-        for report in reports:
-            report_data = {
-                "id": report.id,
-                "title": report.title,
-                "type": report.type,
-                "format": report.format,
-                "created_at": report.created_at.isoformat(),
-                "parameters": report.parameters,
-                "content": report.content
-            }
-            export_data["reports"].append(report_data)
-        
-        # Save to file
-        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        filename = f"bulk_export_{user_id}_{timestamp}.{format}"
-        file_path = self.reports_directory / filename
-        
-        try:
-            if format == "json":
-                with open(file_path, 'w') as f:
-                    json.dump(export_data, f, indent=2)
-            elif format == "csv":
-                with open(file_path, 'w') as f:
-                    f.write(self._convert_to_csv(export_data))
-            
-            return str(file_path)
-            
-        except Exception as e:
-            print(f"Error exporting reports: {e}")
-            return None

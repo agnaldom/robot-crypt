@@ -1,6 +1,6 @@
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # Portfolio Snapshot Schemas
@@ -39,9 +39,7 @@ class PortfolioAssetInDB(PortfolioAssetBase):
     snapshot_id: int
     updated_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # Portfolio Snapshot Schemas
 class PortfolioSnapshotBase(BaseModel):
@@ -83,9 +81,7 @@ class PortfolioSnapshotInDB(PortfolioSnapshotBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 class PortfolioSnapshotWithAssets(PortfolioSnapshotInDB):
     assets: List[PortfolioAssetInDB] = []
@@ -108,7 +104,8 @@ class PortfolioTransactionBase(BaseModel):
     external_source: Optional[str] = None
     executed_at: datetime
     
-    @validator("transaction_type")
+    @field_validator("transaction_type")
+    @classmethod
     def validate_transaction_type(cls, v):
         if v not in ["buy", "sell"]:
             raise ValueError("Transaction type must be 'buy' or 'sell'")
@@ -137,9 +134,7 @@ class PortfolioTransactionInDB(PortfolioTransactionBase):
     id: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
-
+    model_config = ConfigDict(from_attributes=True)
 
 # Portfolio Metric Schemas
 class PortfolioMetricBase(BaseModel):
@@ -163,7 +158,8 @@ class PortfolioMetricBase(BaseModel):
     win_rate: Optional[float] = None
     additional_metrics: Dict[str, Any] = {}
     
-    @validator("period_type")
+    @field_validator("period_type")
+    @classmethod
     def validate_period_type(cls, v):
         valid_types = ["daily", "weekly", "monthly", "yearly", "all_time"]
         if v not in valid_types:
@@ -200,9 +196,9 @@ class PortfolioMetricInDB(PortfolioMetricBase):
     id: int
     calculated_at: datetime
     
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
-
+    )
 
 # Portfolio Alert Schemas
 class PortfolioAlertBase(BaseModel):
@@ -274,9 +270,9 @@ class PortfolioAlertInDB(PortfolioAlertBase):
     created_at: datetime
     last_triggered_at: Optional[datetime] = None
     
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
-
+    )
 
 # Portfolio Projection Schemas
 class PortfolioProjectionBase(BaseModel):
@@ -340,9 +336,9 @@ class PortfolioProjectionInDB(PortfolioProjectionBase):
     id: int
     created_at: datetime
     
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
-
+    )
 
 # Portfolio Report Schemas
 class PortfolioReportBase(BaseModel):
@@ -403,5 +399,6 @@ class PortfolioReportInDB(PortfolioReportBase):
     id: int
     created_at: datetime
     
-    class Config:
+    model_config = ConfigDict(
         from_attributes = True
+    )
