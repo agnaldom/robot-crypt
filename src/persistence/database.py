@@ -4,7 +4,7 @@ Abstract database interface.
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Type, TypeVar, Generic, Union
 
-from core.logging_setup import logger
+from src.core.logging_setup import logger
 
 T = TypeVar('T')
 
