@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Any, Tuple, Union
 import urllib.parse
 import requests
 
-from core.config import settings
-from core.logging_setup import logger
+from src.core.config import settings
+from src.core.logging_setup import logger
 
 
 class BinanceAPIException(Exception):
