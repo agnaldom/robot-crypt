@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Set
 
-from models.trade import OrderSide
+from src.models.trade import OrderSide
 
 
 @dataclass
