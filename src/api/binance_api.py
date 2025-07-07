@@ -11,7 +11,7 @@ import os
 import json
 from datetime import datetime
 from urllib.parse import urlencode
-from ..utils.utils import format_symbol
+from src.utils.utils import format_symbol, validate_order_parameters
 
 class BinanceAPI:
     """Classe para interagir com a API da Binance"""
@@ -290,6 +290,63 @@ class BinanceAPI:
     
     def create_order(self, symbol, side, type, quantity=None, price=None, time_in_force=None):
         """Cria uma ordem de compra ou venda"""
+        # VALIDAÇÃO AUTOMÁTICA DE ORDEM - CORREÇÃO ERRO 400
+        if quantity and price:
+            try:
+                validation_result = validate_order_parameters(
+                    symbol=symbol,
+                    side=side,
+                    order_type=type,
+                    quantity=quantity,
+                    price=price,
+                    binance_api=self
+                )
+                
+                if not validation_result['valid']:
+                    error_msg = f"Parâmetros de ordem inválidos para {symbol}: {'; '.join(validation_result['errors'])}"
+                    self._log_structured("error", error_msg, {
+                        "symbol": symbol,
+                        "side": side,
+                        "type": type,
+                        "quantity": quantity,
+                        "price": price,
+                        "errors": validation_result['errors']
+                    })
+                    raise ValueError(error_msg)
+                
+                # Usa parâmetros corrigidos
+                if validation_result['corrected_quantity'] != quantity:
+                    old_quantity = quantity
+                    quantity = validation_result['corrected_quantity']
+                    self._log_structured("info", f"Quantidade corrigida para {symbol}", {
+                        "old_quantity": old_quantity,
+                        "new_quantity": quantity,
+                        "symbol": symbol
+                    })
+                
+                if validation_result['corrected_price'] != price:
+                    old_price = price
+                    price = validation_result['corrected_price']
+                    self._log_structured("info", f"Preço corrigido para {symbol}", {
+                        "old_price": old_price,
+                        "new_price": price,
+                        "symbol": symbol
+                    })
+                
+                # Log dos avisos
+                for warning in validation_result['warnings']:
+                    self._log_structured("warning", f"Correção aplicada na ordem {symbol}: {warning}", {
+                        "symbol": symbol,
+                        "warning": warning
+                    })
+                    
+            except Exception as validation_error:
+                self._log_structured("error", f"Erro na validação da ordem {symbol}: {str(validation_error)}", {
+                    "symbol": symbol,
+                    "error": str(validation_error)
+                })
+                # Continua sem validação se houver erro
+        
         endpoint = "/v3/order"
         
         # Converte o símbolo para o formato da Binance
@@ -303,10 +360,12 @@ class BinanceAPI:
         
         # Adiciona parâmetros específicos de acordo com o tipo de ordem
         if quantity:
-            params['quantity'] = quantity
+            # Garante que a quantidade não está em notação científica
+            params['quantity'] = f"{float(quantity):.8f}".rstrip('0').rstrip('.')
             
         if price and type.upper() != 'MARKET':
-            params['price'] = price
+            # Garante que o preço não está em notação científica
+            params['price'] = f"{float(price):.8f}".rstrip('0').rstrip('.')
             
         if time_in_force and type.upper() == 'LIMIT':
             params['timeInForce'] = time_in_force
@@ -724,6 +783,44 @@ class BinanceAPI:
             return symbol_info
         except Exception as e:
             self.logger.error(f"Erro ao validar par de trading {symbol}: {str(e)}")
+            return None
+    
+    def get_symbol_info(self, symbol):
+        """
+        Obtém informações detalhadas sobre um símbolo específico, incluindo filtros de precisão
+        
+        Args:
+            symbol (str): Símbolo para obter informações (ex: 'BTCUSDT')
+            
+        Returns:
+            dict: Informações do símbolo incluindo filtros, ou None se não encontrado
+        """
+        try:
+            exchange_info = self.get_exchange_info()
+            symbols = exchange_info.get('symbols', [])
+            
+            # Formata o símbolo para garantir compatibilidade
+            formatted_symbol = format_symbol(symbol)
+            
+            # Procura pelo símbolo específico
+            for symbol_info in symbols:
+                if symbol_info['symbol'] == formatted_symbol:
+                    self._log_structured("debug", f"Informações encontradas para {symbol}", {
+                        "symbol": formatted_symbol,
+                        "status": symbol_info.get('status'),
+                        "filters_count": len(symbol_info.get('filters', []))
+                    })
+                    return symbol_info
+            
+            self._log_structured("warning", f"Símbolo {symbol} não encontrado nas informações da exchange", {
+                "formatted_symbol": formatted_symbol,
+                "available_symbols_count": len(symbols)
+            })
+            return None
+            
+        except Exception as e:
+            self._log_structured("error", f"Erro ao obter informações do símbolo {symbol}", 
+                               {"symbol": symbol}, e)
             return None
     
     def get_valid_trading_pairs(self, base_assets=None, quote_assets=None):
