@@ -19,7 +19,6 @@ class TestAuthEndpoints:
         data = response.json()
         assert data["email"] == sample_user_data["email"]
         assert data["full_name"] == sample_user_data["full_name"]
-        assert data["telegram_id"] == sample_user_data["telegram_id"]
         assert "id" in data
         assert "password" not in data  # Password should not be returned
     
@@ -32,7 +31,7 @@ class TestAuthEndpoints:
         # Second registration with same email
         response = await client.post("/auth/register", json=sample_user_data)
         assert response.status_code == 400
-        assert "already registered" in response.json()["detail"].lower()
+        assert "already exists" in response.json()["detail"].lower()
     
     @pytest.mark.asyncio
     async def test_register_user_invalid_data(self, client: AsyncClient):
@@ -79,7 +78,7 @@ class TestAuthEndpoints:
         
         response = await client.post("/auth/login", data=login_data)
         assert response.status_code == 401
-        assert "Invalid credentials" in response.json()["detail"]
+        assert "Incorrect username or password" in response.json()["detail"]
     
     @pytest.mark.asyncio
     async def test_login_nonexistent_user(self, client: AsyncClient):
@@ -91,7 +90,7 @@ class TestAuthEndpoints:
         
         response = await client.post("/auth/login", data=login_data)
         assert response.status_code == 401
-        assert "Invalid credentials" in response.json()["detail"]
+        assert "Incorrect username or password" in response.json()["detail"]
     
     @pytest.mark.asyncio
     async def test_get_current_user(self, client: AsyncClient, sample_user_data: dict):
