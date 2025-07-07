@@ -8,8 +8,8 @@ import json
 from datetime import datetime
 import psycopg2
 from psycopg2.extras import Json, DictCursor
-from ..api.binance_api import BinanceAPI
-from ..database.postgres_manager import PostgresManager
+from src.api.binance_api import BinanceAPI
+from src.database.postgres_manager import PostgresManager
 
 class WalletManager:
     """Classe para gerenciar a carteira do usuário e sincronizar com o banco de dados"""
