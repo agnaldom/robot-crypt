@@ -17,17 +17,17 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 
-from ..models.alert import Alert
-from ..models.user import User
-from ..models.asset import Asset
-from ..schemas.alert import AlertCreate, AlertTrigger
-from ..notifications.telegram_notifier import TelegramNotifier
-from ..notifications.local_notifier import LocalNotifier
+from src.models.alert import Alert
+from src.models.user import User
+from src.models.asset import Asset
+from src.schemas.alert import AlertCreate, AlertTrigger
+from src.notifications.telegram_notifier import TelegramNotifier
+from src.notifications.local_notifier import LocalNotifier
 from .llm_client import LLMClient, get_llm_client
 from .pattern_detector import AdvancedPatternDetector
 from .news_analyzer import LLMNewsAnalyzer
-from ..core.database import get_db
-from ..core.config import settings
+from src.core.database import get_db
+from src.core.config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -741,9 +741,9 @@ def create_smart_alerts_engine() -> SmartAlertsEngine:
     from .llm_client import get_llm_client
     from .pattern_detector import AdvancedPatternDetector
     from .news_analyzer import LLMNewsAnalyzer
-    from ..notifications.telegram_notifier import TelegramNotifier
-    from ..notifications.local_notifier import LocalNotifier
-    from ..core.config import settings
+    from src.notifications.telegram_notifier import TelegramNotifier
+    from src.notifications.local_notifier import LocalNotifier
+    from src.core.config import settings
     
     llm_client = get_llm_client()
     pattern_detector = AdvancedPatternDetector()
