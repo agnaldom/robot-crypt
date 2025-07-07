@@ -17,7 +17,7 @@ import logging
 sys.path.append(str(Path(__file__).parent.parent / 'src'))
 
 from ml.postgres_training_system import PostgresTradingTrainer
-from utils.logging_config import setup_logging
+from src.utils.logging_config import setup_logging
 
 
 class PostgresTrainingCLI:
