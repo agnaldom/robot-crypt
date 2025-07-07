@@ -47,8 +47,8 @@ def mock_user():
         full_name="Test User",
         is_active=True,
         is_superuser=False,
-        created_at=datetime.now(datetime.UTC),
-        updated_at=datetime.now(datetime.UTC),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         preferences={}
     )
 
@@ -63,7 +63,7 @@ def mock_superuser():
         is_active=True,
         is_superuser=True,
         created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        updated_at=datetime.now(timezone.utc),
         preferences={}
     )
 
@@ -78,7 +78,7 @@ def mock_inactive_user():
         is_active=False,
         is_superuser=False,
         created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc)
+        updated_at=datetime.now(timezone.utc),
         preferences={}
     )
 
