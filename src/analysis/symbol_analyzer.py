@@ -6,9 +6,10 @@ Implementa análise de dados de mercado, geração de sinais e predições usand
 import logging
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Any
-import json
+from datetime import datetime
+from typing import Dict, List, Any, Optional
+import logging
+from src.utils.type_converter import convert_numpy_types, fix_analysis_data
 from dataclasses import dataclass, asdict
 
 from src.database.postgres_manager import PostgresManager
@@ -23,14 +24,42 @@ class BinanceClient:
     
     def __init__(self):
         self.logger = logging.getLogger("robot-crypt.binance_client")
+        # Import BinanceSimulator here to avoid circular imports
+        from src.api.binance.simulator import BinanceSimulator
+        self.simulator = BinanceSimulator()
     
     def get_klines(self, symbol: str, interval: str, limit: int) -> List[Dict]:
         """
-        Simula busca de dados de klines da Binance
-        Em uma implementação real, faria chamada para a API
+        Simula busca de dados de klines da Binance usando o simulator
         """
-        self.logger.warning(f"BinanceClient mock - dados não disponíveis para {symbol}")
-        return []
+        try:
+            # Use the simulator to get kline data
+            klines_data = self.simulator.get_klines(symbol, interval, limit=limit)
+            
+            if not klines_data:
+                self.logger.warning(f"BinanceClient mock - dados não disponíveis para {symbol}")
+                return []
+            
+            # Convert kline format to expected format
+            market_data = []
+            for kline in klines_data:
+                market_data.append({
+                    'open_time': int(kline[0]),  # timestamp in ms
+                    'open': float(kline[1]),
+                    'high': float(kline[2]),
+                    'low': float(kline[3]),
+                    'close': float(kline[4]),
+                    'volume': float(kline[5]),
+                    'close_time': int(kline[6]),
+                    'quote_volume': float(kline[7])
+                })
+            
+            self.logger.info(f"BinanceClient mock - gerados {len(market_data)} dados para {symbol}")
+            return market_data
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar dados simulados para {symbol}: {str(e)}")
+            return []
 
 
 @dataclass
@@ -147,6 +176,9 @@ class SymbolAnalyzer:
             for signal in signals:
                 self.record_signals([signal])
             
+            # 9. Converter tipos numpy para tipos nativos
+            complete_analysis = fix_analysis_data(complete_analysis)
+            
             self.logger.info(f"Análise completa de {symbol} finalizada com {len(signals)} sinais gerados")
             return complete_analysis
             
@@ -206,8 +238,24 @@ class SymbolAnalyzer:
             # Converte dados para formato de klines para análise técnica
             klines = []
             for data in market_data:
+                # Handle timestamp - could be int (ms), datetime object, or string
+                open_time = data['open_time']
+                if hasattr(open_time, 'timestamp'):
+                    # DateTime object
+                    timestamp_ms = int(open_time.timestamp() * 1000)
+                elif isinstance(open_time, str):
+                    # String timestamp - parse and convert
+                    try:
+                        dt = datetime.fromisoformat(open_time.replace('Z', '+00:00'))
+                        timestamp_ms = int(dt.timestamp() * 1000)
+                    except:
+                        timestamp_ms = int(float(open_time))
+                else:
+                    # Already an integer timestamp in ms
+                    timestamp_ms = int(open_time)
+                
                 kline = [
-                    int(data['open_time'].timestamp() * 1000) if hasattr(data['open_time'], 'timestamp') else data['open_time'],
+                    timestamp_ms,
                     str(data['open']),
                     str(data['high']),
                     str(data['low']),
@@ -776,18 +824,39 @@ class SymbolAnalyzer:
             True se sucesso, False caso contrário
         """
         try:
-            # Converte datetime objects para strings para serialização
-            def convert_datetime_to_string(obj):
-                if isinstance(obj, datetime):
+            # Converte datetime objects para strings e garante que todos os tipos sejam JSON serializáveis
+            def convert_to_json_serializable(obj):
+                import numpy as np
+                import pandas as pd
+                
+                # Verificar tipos numpy primeiro (antes dos tipos básicos do Python)
+                if isinstance(obj, np.bool_):
+                    return bool(obj)  # Converte numpy boolean para Python boolean
+                elif isinstance(obj, (np.integer, np.floating)):
+                    return float(obj)  # Converte tipos numéricos do numpy
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()  # Converte arrays numpy para listas
+                elif isinstance(obj, pd.Series):
+                    return obj.tolist()  # Converte Series do pandas para lista
+                elif isinstance(obj, pd.DataFrame):
+                    return obj.to_dict('records')  # Converte DataFrame para lista de dicts
+                elif isinstance(obj, datetime):
                     return obj.isoformat()
                 elif isinstance(obj, dict):
-                    return {key: convert_datetime_to_string(value) for key, value in obj.items()}
+                    return {key: convert_to_json_serializable(value) for key, value in obj.items()}
                 elif isinstance(obj, list):
-                    return [convert_datetime_to_string(item) for item in obj]
+                    return [convert_to_json_serializable(item) for item in obj]
+                elif isinstance(obj, bool):
+                    return obj  # Boolean é JSON serializável
+                elif isinstance(obj, (int, float, str)):
+                    return obj  # Tipos básicos são JSON serializáveis
+                elif obj is None:
+                    return obj  # None é JSON serializável
                 else:
-                    return obj
+                    # Para outros tipos, tenta converter para string
+                    return str(obj)
             
-            serializable_analysis = convert_datetime_to_string(analysis)
+            serializable_analysis = convert_to_json_serializable(analysis)
             
             analysis_id = self.db.save_analysis(
                 symbol=symbol,
@@ -833,13 +902,14 @@ class SymbolAnalyzer:
             else:
                 level = 'normal'
             
-            return {
+            result = {
                 'current_volatility': float(current_volatility),
                 'average_volatility': float(avg_volatility),
                 'volatility_ratio': float(volatility_ratio),
                 'volatility_level': level,
                 'volatility_trend': 'increasing' if volatility_window.iloc[-1] > volatility_window.iloc[-5] else 'decreasing'
             }
+            return convert_numpy_types(result)
             
         except Exception as e:
             self.logger.error(f"Erro na análise de volatilidade: {str(e)}")
@@ -867,7 +937,7 @@ class SymbolAnalyzer:
             volume_ma_long = df['volume'].rolling(20).mean().iloc[-1]
             volume_trend = 'increasing' if volume_ma_short > volume_ma_long else 'decreasing'
             
-            return {
+            result = {
                 'current_volume': float(current_volume),
                 'average_volume': float(avg_volume),
                 'volume_ratio': float(volume_ratio),
@@ -875,6 +945,7 @@ class SymbolAnalyzer:
                 'price_trend': price_trend,
                 'volume_trend': volume_trend
             }
+            return convert_numpy_types(result)
             
         except Exception as e:
             self.logger.error(f"Erro na análise de volume: {str(e)}")
@@ -939,14 +1010,15 @@ class SymbolAnalyzer:
                     'description': 'Rompimento de mínimas recentes'
                 })
             
-            return {'patterns': patterns}
+            result = {'patterns': patterns}
+            return convert_numpy_types(result)
             
         except Exception as e:
             self.logger.error(f"Erro na análise de padrões: {str(e)}")
             return {'patterns': []}
 
     def _calculate_data_span(self, market_data: List[Dict]) -> float:
-        """Calcula o período de tempo coberto pelos dados em horas"""
+        """Calcula o peredodo de tempo coberto pelos dados em horas"""
         try:
             if len(market_data) < 2:
                 return 0
@@ -954,15 +1026,27 @@ class SymbolAnalyzer:
             first_time = market_data[0]['open_time']
             last_time = market_data[-1]['open_time']
             
+            # Handle different timestamp formats
             if hasattr(first_time, 'timestamp'):
+                # DateTime objects
                 time_diff = last_time.timestamp() - first_time.timestamp()
+            elif isinstance(first_time, str):
+                # String timestamps
+                try:
+                    first_dt = datetime.fromisoformat(first_time.replace('Z', '+00:00'))
+                    last_dt = datetime.fromisoformat(last_time.replace('Z', '+00:00'))
+                    time_diff = last_dt.timestamp() - first_dt.timestamp()
+                except:
+                    time_diff = float(last_time) - float(first_time)
+                    time_diff = time_diff / 1000  # Convert ms to seconds if needed
             else:
-                time_diff = last_time - first_time
+                # Integer timestamps (assume milliseconds)
+                time_diff = (last_time - first_time) / 1000  # Convert ms to seconds
             
-            return time_diff / 3600  # Converte para horas
+            return time_diff / 3600  # Convert to hours
             
         except Exception as e:
-            self.logger.error(f"Erro ao calcular período dos dados: {str(e)}")
+            self.logger.error(f"Erro ao calcular peredodo dos dados: {str(e)}")
             return 0
 
     def _create_analysis_summary(self, processed_data: Dict, signals: List[TradingSignal], 
