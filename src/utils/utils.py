@@ -884,6 +884,155 @@ def get_precision_for_symbol(symbol, price, binance_api=None):
     
     return result
 
+def validate_order_parameters(symbol, side, order_type, quantity, price, binance_api=None):
+    """Valida parâmetros de ordem de acordo com as regras da Binance
+    
+    Args:
+        symbol (str): Símbolo da moeda (ex: 'BTC/USDT')
+        side (str): Lado da ordem ('BUY' ou 'SELL')
+        order_type (str): Tipo da ordem ('LIMIT', 'MARKET', etc.)
+        quantity (float): Quantidade da ordem
+        price (float): Preço da ordem
+        binance_api (BinanceAPI, optional): Instância da API da Binance
+        
+    Returns:
+        dict: {
+            'valid': bool,
+            'corrected_quantity': float,
+            'corrected_price': float,
+            'errors': list,
+            'warnings': list
+        }
+    """
+    import logging
+    logger = logging.getLogger("robot-crypt")
+    
+    result = {
+        'valid': True,
+        'corrected_quantity': quantity,
+        'corrected_price': price,
+        'errors': [],
+        'warnings': []
+    }
+    
+    try:
+        # Obtém informações do símbolo
+        symbol_info = None
+        if binance_api and hasattr(binance_api, 'get_symbol_info'):
+            formatted_symbol = format_symbol(symbol)
+            symbol_info = binance_api.get_symbol_info(formatted_symbol)
+        
+        if not symbol_info:
+            # Fallback para regras básicas quando não há API
+            precision_rules = get_precision_for_symbol(symbol, price, None)
+            result['corrected_quantity'] = adjust_quantity_precision(quantity, symbol, price, None)
+            result['warnings'].append(f"Usando regras de precisão padrão para {symbol}")
+            return result
+        
+        # Verifica se o símbolo está ativo para trading
+        if symbol_info.get('status') != 'TRADING':
+            result['valid'] = False
+            result['errors'].append(f"Símbolo {symbol} não está disponível para trading")
+            return result
+        
+        # Analisa filtros
+        filters = symbol_info.get('filters', [])
+        
+        price_filter = None
+        lot_size_filter = None
+        min_notional_filter = None
+        
+        for filter_data in filters:
+            filter_type = filter_data.get('filterType')
+            
+            if filter_type == 'PRICE_FILTER':
+                price_filter = filter_data
+            elif filter_type == 'LOT_SIZE':
+                lot_size_filter = filter_data
+            elif filter_type == 'MIN_NOTIONAL':
+                min_notional_filter = filter_data
+        
+        # Valida preço
+        if price_filter and order_type in ['LIMIT', 'STOP_LOSS_LIMIT', 'TAKE_PROFIT_LIMIT']:
+            min_price = float(price_filter['minPrice'])
+            max_price = float(price_filter['maxPrice'])
+            tick_size = float(price_filter['tickSize'])
+            
+            if price < min_price:
+                result['valid'] = False
+                result['errors'].append(f"Preço {price:.8f} abaixo do mínimo {min_price:.8f}")
+            elif price > max_price:
+                result['valid'] = False
+                result['errors'].append(f"Preço {price:.8f} acima do máximo {max_price:.8f}")
+            else:
+                # Ajusta preço para múltiplo do tick size
+                corrected_price = round(price / tick_size) * tick_size
+                if abs(corrected_price - price) > tick_size * 0.01:
+                    result['corrected_price'] = corrected_price
+                    result['warnings'].append(f"Preço ajustado de {price:.8f} para {corrected_price:.8f}")
+        
+        # Valida quantidade
+        if lot_size_filter:
+            min_qty = float(lot_size_filter['minQty'])
+            max_qty = float(lot_size_filter['maxQty'])
+            step_size = float(lot_size_filter['stepSize'])
+            
+            if quantity < min_qty:
+                result['corrected_quantity'] = min_qty
+                result['warnings'].append(f"Quantidade ajustada de {quantity} para {min_qty} (mínimo)")
+            elif quantity > max_qty:
+                result['valid'] = False
+                result['errors'].append(f"Quantidade {quantity} acima do máximo {max_qty}")
+            else:
+                # Ajusta quantidade para múltiplo do step size
+                corrected_qty = round(quantity / step_size) * step_size
+                if abs(corrected_qty - quantity) > step_size * 0.01:
+                    result['corrected_quantity'] = corrected_qty
+                    result['warnings'].append(f"Quantidade ajustada de {quantity} para {corrected_qty}")
+        
+        # Valida valor mínimo notional
+        # Usa um padrão de 5 USDT se não houver filtro específico
+        min_notional = 5.0  # Valor padrão conservador
+        if min_notional_filter:
+            min_notional = float(min_notional_filter['minNotional'])
+        else:
+            result['warnings'].append(f"Filtro MIN_NOTIONAL não encontrado, usando padrão: {min_notional} USDT")
+        
+        order_value = result['corrected_quantity'] * result['corrected_price']
+        if order_value < min_notional:
+            # Calcula quantidade mínima necessária
+            min_required_qty = min_notional / result['corrected_price']
+            
+            # Ajusta para step size se disponível
+            if lot_size_filter:
+                step_size = float(lot_size_filter['stepSize'])
+                min_required_qty = round(min_required_qty / step_size) * step_size
+                min_required_qty = max(min_required_qty, float(lot_size_filter['minQty']))
+            
+            result['corrected_quantity'] = min_required_qty
+            new_order_value = result['corrected_quantity'] * result['corrected_price']
+            result['warnings'].append(
+                f"Quantidade ajustada de {quantity} para {min_required_qty} "
+                f"para atingir valor mínimo notional ({new_order_value:.2f} USDT)"
+            )
+        
+        # Verifica se ainda é válido após todas as correções
+        final_order_value = result['corrected_quantity'] * result['corrected_price']
+        if final_order_value < min_notional:
+            result['valid'] = False
+            result['errors'].append(
+                f"Não foi possível ajustar ordem para valor mínimo notional "
+                f"({final_order_value:.6f} < {min_notional})"
+            )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Erro ao validar parâmetros da ordem: {str(e)}")
+        result['valid'] = False
+        result['errors'].append(f"Erro na validação: {str(e)}")
+        return result
+
 def adjust_quantity_precision(quantity, symbol, price, binance_api=None):
     """Ajusta a precisão da quantidade de acordo com as regras da exchange
     
