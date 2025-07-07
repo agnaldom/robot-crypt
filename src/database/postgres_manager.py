@@ -629,12 +629,65 @@ class PostgresManager:
         self._check_and_reconnect()
         
         try:
+            # Primeiro, vamos debuggar o que está chegando
+            self.logger.info(f"Dados originais para save_analysis de {symbol}: {type(data)}")
+            
+            # Converte dados para formato JSON serializável
+            def convert_to_json_serializable(obj):
+                import numpy as np
+                import pandas as pd
+                from datetime import datetime
+                
+                # Verificar tipos numpy e pandas primeiro (antes dos tipos básicos do Python)
+                if isinstance(obj, np.bool_):
+                    return bool(obj)  # Converte numpy boolean para Python boolean
+                elif isinstance(obj, (np.integer, np.floating)):
+                    return float(obj)  # Converte tipos numéricos do numpy
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()  # Converte arrays numpy para listas
+                elif isinstance(obj, pd.Series):
+                    return obj.tolist()  # Converte Series do pandas para lista
+                elif isinstance(obj, pd.DataFrame):
+                    return obj.to_dict('records')  # Converte DataFrame para lista de dicts
+                elif hasattr(obj, 'dtype') and hasattr(obj, 'item'):
+                    # Trata escalares do pandas/numpy que têm dtype (como resultado de comparações)
+                    return obj.item()  # Extrai o valor Python nativo
+                elif isinstance(obj, datetime):
+                    return obj.isoformat()
+                elif isinstance(obj, dict):
+                    return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_to_json_serializable(item) for item in obj]
+                elif isinstance(obj, bool):
+                    return obj  # Boolean é JSON serializável
+                elif isinstance(obj, (int, float, str)):
+                    return obj  # Tipos básicos são JSON serializáveis
+                elif obj is None:
+                    return obj  # None é JSON serializável
+                else:
+                    # Para outros tipos, tenta converter para string
+                    self.logger.warning(f"Convertendo tipo desconhecido para string: {type(obj)} -> {obj}")
+                    return str(obj)
+            
+            # Converte os dados antes de usar Json()
+            serializable_data = convert_to_json_serializable(data)
+            
+            # Testa a serialização JSON antes de enviar para o banco
+            import json
+            try:
+                json.dumps(serializable_data)
+                self.logger.info(f"Dados convertidos com sucesso para JSON serializável")
+            except Exception as json_error:
+                self.logger.error(f"Erro na serialização JSON após conversão: {json_error}")
+                # Se ainda falhar, vamos tentar uma conversão mais agressiva
+                serializable_data = json.loads(json.dumps(serializable_data, default=str))
+            
             query = """
                 INSERT INTO market_analysis (symbol, analysis_type, data)
                 VALUES (%s, %s, %s)
                 RETURNING id
             """
-            self.cursor.execute(query, (symbol, analysis_type, Json(data)))
+            self.cursor.execute(query, (symbol, analysis_type, Json(serializable_data)))
             analysis_id = self.cursor.fetchone()[0]
             self.conn.commit()
             
