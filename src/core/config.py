@@ -109,9 +109,10 @@ class Settings(BaseSettings):
     )
     
     # === CONFIGURAÇÕES DE CORS ===
-    ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
-        description="Origens permitidas para CORS"
+    ALLOWED_ORIGINS_RAW: str = Field(
+        default="http://localhost:3000,http://localhost:8080",
+        description="Origens permitidas para CORS (formato string)",
+        alias="ALLOWED_ORIGINS"
     )
     
     # === CONFIGURAÇÕES DA BINANCE ===
@@ -257,13 +258,24 @@ class Settings(BaseSettings):
                 # Se não conseguir parsear, retorna lista padrão
                 return ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
     
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def parse_allowed_origins(cls, v):
-        """Parse allowed origins de string ou lista."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    @property
+    def ALLOWED_ORIGINS(self) -> List[str]:
+        """Converte ALLOWED_ORIGINS_RAW em lista de strings."""
+        v = self.ALLOWED_ORIGINS_RAW
+        
+        if not v:
+            return ["http://localhost:3000", "http://localhost:8080"]
+        
+        # Remove espaços em branco no início e fim
+        v = v.strip()
+        
+        # Parse como CSV (comma-separated values)
+        origins = [origin.strip() for origin in v.split(",") if origin.strip()]
+        if origins:
+            return origins
+        else:
+            # Se não conseguir parsear, retorna lista padrão
+            return ["http://localhost:3000", "http://localhost:8080"]
     
     @property
     def notifications_enabled(self) -> bool:
