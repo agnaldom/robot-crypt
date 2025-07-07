@@ -16,16 +16,38 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
         
-        # Headers de segurança obrigatórios
+        # Headers de segurança - ajustado para permitir Swagger UI
+        # Check if this is a docs request to allow more permissive CSP
+        is_docs_request = request.url.path.startswith('/docs') or request.url.path.startswith('/redoc') or request.url.path.startswith('/openapi.json')
+        
+        if is_docs_request:
+            # More permissive CSP for documentation
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://fastapi.tiangolo.com; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; "
+                "font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+                "connect-src 'self' https://cdn.jsdelivr.net; "
+                "frame-src 'none'; "
+                "object-src 'none'"
+            )
+        else:
+            # Strict CSP for regular pages
+            csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'"
+        
+        # Adjust cache control for docs
+        cache_control = "public, max-age=300" if is_docs_request else "no-store, no-cache, must-revalidate, private"
+        
         security_headers = {
             "X-Content-Type-Options": "nosniff",
             "X-Frame-Options": "DENY",
             "X-XSS-Protection": "1; mode=block",
             "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'",
+            "Content-Security-Policy": csp,
             "Referrer-Policy": "strict-origin-when-cross-origin",
             "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-            "Cache-Control": "no-store, no-cache, must-revalidate, private"
+            "Cache-Control": cache_control
         }
         
         # Aplicar headers
@@ -94,14 +116,25 @@ class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
     def __init__(self, app):
         super().__init__(app)
         self.suspicious_patterns = [
-            # SQL Injection patterns
-            r"(?i)(union|select|insert|update|delete|drop|create|alter)",
+            # SQL Injection patterns (more specific to avoid false positives)
+            r"(?i)\b(union\s+select|insert\s+into|update\s+set|delete\s+from|drop\s+table|create\s+table|alter\s+table)\b",
             # XSS patterns
             r"(?i)(<script|javascript:|vbscript:|onload=|onerror=)",
             # Path traversal
             r"(\.\./|\.\.\\\|%2e%2e%2f|%2e%2e%5c)",
             # Command injection
-            r"(?i)(;|&&|\|\||`|\$\(|\${)"
+            r"(?i)(;\s*rm\s|;\s*cat\s|\&\&\s*rm\s|\|\|\s*rm\s|`\s*rm\s|\$\(\s*rm|\${\s*rm)"
+        ]
+        
+        # Paths that should be excluded from security scanning
+        self.excluded_paths = [
+            "/docs",
+            "/redoc", 
+            "/openapi.json",
+            "/favicon.ico",
+            "/static/",
+            "/health",
+            "/"
         ]
     
     async def dispatch(self, request: Request, call_next):
@@ -138,6 +171,12 @@ class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
     def _check_suspicious_content(self, request: Request) -> bool:
         """Check for suspicious patterns in request."""
         import re
+        
+        # Check if path should be excluded from security scanning
+        request_path = request.url.path
+        for excluded_path in self.excluded_paths:
+            if request_path.startswith(excluded_path):
+                return False
         
         # Verificar URL path
         for pattern in self.suspicious_patterns:
