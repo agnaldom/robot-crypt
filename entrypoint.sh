@@ -161,8 +161,9 @@ start_api() {
         log_message "INFO" "🔄 Hot reload ativado"
     fi
     
-    # Adicionar log level baseado na configuração
-    UVICORN_CMD="$UVICORN_CMD --log-level $LOG_LEVEL"
+    # Adicionar log level baseado na configuração (converter para minúsculo)
+    UVICORN_LOG_LEVEL=$(echo "$LOG_LEVEL" | tr '[:upper:]' '[:lower:]')
+    UVICORN_CMD="$UVICORN_CMD --log-level $UVICORN_LOG_LEVEL"
     
     log_message "INFO" "💻 Executando: $UVICORN_CMD"
     log_message "INFO" "🚀 ==========================================="
