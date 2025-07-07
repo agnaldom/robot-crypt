@@ -171,8 +171,8 @@ def initialize_resources():
     
     # Inicializa analisador de notícias (para análise contextual)
     try:
-        from analysis.news_analyzer import NewsAnalyzer
-        from api.external.news_api_client import NewsAPIClient
+        from src.analysis.news_analyzer import NewsAnalyzer
+        from src.api.external.news_api_client import NewsAPIClient
         news_client = NewsAPIClient()
         news_analyzer = NewsAnalyzer(news_client)
         logger.info("Analisador de notícias inicializado com sucesso")
@@ -532,7 +532,7 @@ def main():
     
     # Importa estratégias aprimoradas
     try:
-        from strategies.enhanced_strategy import create_enhanced_strategy
+        from src.strategies.enhanced_strategy import create_enhanced_strategy
         use_enhanced_strategies = True
         logger.info("Estratégias aprimoradas com IA disponíveis")
     except ImportError as e:
@@ -620,16 +620,21 @@ def main():
             'profit_history': []
         }
         
+        # Verifica e adiciona estatísticas ausentes (migração automática)
+        missing_keys = []
         for key, default_value in required_stats.items():
             if key not in stats:
-                logger.warning(f"Chave {key} não encontrada nas estatísticas. Criando com valor padrão.")
+                missing_keys.append(key)
                 stats[key] = default_value
+        
+        if missing_keys:
+            logger.info(f"Migrando estatísticas: adicionadas chaves {', '.join(missing_keys)} com valores padrão")
         
         # Converte a string de data de volta para datetime
         if 'start_time' in stats and isinstance(stats['start_time'], str):
             stats['start_time'] = datetime.fromisoformat(stats['start_time'])
-        else:
-            logger.warning("Chave start_time não encontrada nas estatísticas. Criando com valor atual.")
+        elif 'start_time' not in stats:
+            logger.info("Inicializando start_time para sessão restaurada")
             stats['start_time'] = datetime.now()
         
         # Obtém hora da última verificação
@@ -809,14 +814,20 @@ def main():
                     logger.info(f"Análise de {pair} concluída em {pair_analysis_duration:.2f}s - Resultado: {action if should_trade else 'sem ação'}")
                     
                     if should_trade:
-                        logger.info(f"Sinal de {action.upper()} detectado para {pair} a {price:.8f}")
+                        # Verifica se o preço não é None antes de formatar
+                        if price is not None:
+                            logger.info(f"Sinal de {action.upper()} detectado para {pair} a {price:.8f}")
+                        else:
+                            logger.warning(f"Sinal de {action.upper()} detectado para {pair} mas preço é None - pulando transação")
+                            continue  # Pula para o próximo par se o preço é None
                         if action == "buy":
                             success, order_info = strategy.execute_buy(pair, price)
                             
                             if success:
                                 logger.info(f"COMPRA de {pair} executada com sucesso: {order_info}")
                                 if notifier:
-                                    notifier.notify_trade(f"🛒 COMPRA de {pair}", f"Preço: {price:.8f}\nQuantidade: {order_info['quantity']:.8f}")
+                                    price_str = f"{price:.8f}" if price is not None else "N/A"
+                                    notifier.notify_trade(f"🛒 COMPRA de {pair}", f"Preço: {price_str}\nQuantidade: {order_info['quantity']:.8f}")
                                 
                         elif action == "sell":
                             success, order_info = strategy.execute_sell(pair, price)
@@ -847,7 +858,7 @@ def main():
                                             'symbol': pair,
                                             'operation_type': 'sell',
                                             'entry_price': float(order_info.get('entry_price', 0)),
-                                            'exit_price': float(price),
+                                            'exit_price': float(price) if price is not None else 0.0,
                                             'quantity': float(order_info.get('quantity', 0)),
                                             'profit_loss': float(order_info.get('profit_amount', 0)),
                                             'profit_loss_percentage': profit_percent,
@@ -884,9 +895,10 @@ def main():
                                 # Notifica via Telegram
                                 if notifier:
                                     emoji = "🟢" if profit_percent > 0 else "🔴"
+                                    price_str = f"{price:.8f}" if price is not None else "N/A"
                                     notifier.notify_trade(
                                         f"{emoji} VENDA de {pair}", 
-                                        f"Preço: {price:.8f}\nLucro: {profit_percent:+.2f}%\nSaldo: R${stats['current_capital']:.2f}"
+                                        f"Preço: {price_str}\nLucro: {profit_percent:+.2f}%\nSaldo: R${stats['current_capital']:.2f}"
                                     )
                 
                 except requests.exceptions.RequestException as e:
