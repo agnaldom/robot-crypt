@@ -129,6 +129,7 @@ class Trade(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
+    trading_session_id = Column(Integer, ForeignKey("trading_sessions.id"), nullable=True)
     trade_type = Column(String, nullable=False)  # buy, sell
     quantity = Column(Float, nullable=False)
     price = Column(Float, nullable=False)
@@ -145,6 +146,7 @@ class Trade(Base):
     # Relationships
     user = relationship("User", back_populates="trades")
     asset = relationship("Asset", back_populates="trades")
+    trading_session = relationship("TradingSession", back_populates="trades")
     
     def __repr__(self):
         return f"<Trade {self.trade_type} {self.quantity} {self.asset_id} at {self.price}>"
