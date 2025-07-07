@@ -6,7 +6,7 @@ import sys
 import logging
 from logging.handlers import RotatingFileHandler
 
-from .config import settings
+from src.core.config import settings
 
 
 def setup_logging(log_level=None, log_file=None):
