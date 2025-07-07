@@ -2,26 +2,26 @@
 SQLAlchemy models for Robot-Crypt.
 """
 
-from .user import User
-from .asset import Asset
-from .technical_indicator import TechnicalIndicator
-from .macro_indicator import MacroIndicator
-from .bot_performance import BotPerformance
-from .risk_management import RiskManagement
-from .alert import Alert
-from .trade import Trade
-from .report import Report
+from src.models.user import User
+from src.models.asset import Asset
+from src.models.technical_indicator import TechnicalIndicator
+from src.models.macro_indicator import MacroIndicator
+from src.models.bot_performance import BotPerformance
+from src.models.risk_management import RiskManagement
+from src.models.alert import Alert
+from src.models.trade import Trade
+from src.models.report import Report
 
 # Portfolio-related models
-from .portfolio_orm import Portfolio
-from .portfolio_alert import PortfolioAlert
-from .portfolio_asset import PortfolioAsset
-from .portfolio_metric import PortfolioMetric
-from .portfolio_position import PortfolioPosition
-from .portfolio_projection import PortfolioProjection
-from .portfolio_report import PortfolioReport
-from .portfolio_snapshot import PortfolioSnapshot
-from .portfolio_transaction import PortfolioTransaction
+from src.models.portfolio_orm import Portfolio
+from src.models.portfolio_alert import PortfolioAlert
+from src.models.portfolio_asset import PortfolioAsset
+from src.models.portfolio_metric import PortfolioMetric
+from src.models.portfolio_position import PortfolioPosition
+from src.models.portfolio_projection import PortfolioProjection
+from src.models.portfolio_report import PortfolioReport
+from src.models.portfolio_snapshot import PortfolioSnapshot
+from src.models.portfolio_transaction import PortfolioTransaction
 
 __all__ = [
     "User",
