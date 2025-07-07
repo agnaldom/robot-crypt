@@ -10,9 +10,9 @@ import requests
 from datetime import datetime, timedelta
 import re
 from pathlib import Path
-from ..core.config import Config
+from src.core.config import Config
 import numpy as np
-from ..utils.utils import setup_logger
+from src.utils.utils import setup_logger
 
 class ExternalDataAnalyzer:
     """
