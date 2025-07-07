@@ -26,10 +26,11 @@ try:
 except ImportError:
     logger.warning("dotenv não está instalado. As variáveis de ambiente devem ser definidas manualmente.")
 
-# Adiciona o diretório atual ao path para garantir que os imports funcionem
+# Adiciona o diretório src ao path para garantir que os imports funcionem
 current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
+src_dir = os.path.join(os.path.dirname(os.path.dirname(current_dir)))
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 
 def get_binance_account_info(api_key, api_secret, testnet=True):
     """
@@ -45,7 +46,7 @@ def get_binance_account_info(api_key, api_secret, testnet=True):
     """
     try:
         # Importa aqui para evitar dependências desnecessárias
-        from binance_api import BinanceAPI
+        from src.api.binance_api import BinanceAPI
         
         # Inicializa API da Binance
         api = BinanceAPI(api_key=api_key, api_secret=api_secret, testnet=testnet)
@@ -74,7 +75,7 @@ def get_ticker_price(api_key, api_secret, symbol, testnet=True):
     """
     try:
         # Importa aqui para evitar dependências desnecessárias
-        from binance_api import BinanceAPI
+        from src.api.binance_api import BinanceAPI
         
         # Inicializa API da Binance
         api = BinanceAPI(api_key=api_key, api_secret=api_secret, testnet=testnet)
@@ -191,8 +192,8 @@ def sync_wallet_data(user_id="default_user", show_details=True):
     """
     try:
         # Importa o mínimo necessário para evitar dependências de pandas
-        from config import Config
-        from postgres_manager import PostgresManager
+        from src.core.config import Config
+        from database.postgres_manager import PostgresManager
         
         # Inicializa a configuração
         config = Config()
@@ -295,7 +296,7 @@ def get_total_wallet_balance(user_id):
     """
     try:
         # Importa o PostgresManager
-        from postgres_manager import PostgresManager
+        from database.postgres_manager import PostgresManager
         
         # Inicializa o PostgresManager
         postgres_manager = PostgresManager()
