@@ -11,8 +11,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 import numpy as np
-from ..core.config import Config
-from ..utils.utils import setup_logger
+from src.core.config import Config
+from src.utils.utils import setup_logger
 
 # Importar analisador de contexto avançado se disponível
 try:
