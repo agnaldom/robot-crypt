@@ -19,7 +19,7 @@ class TestTradesEndpoints:
         assert "Not authenticated" in response.json()["detail"]
     
     @pytest.mark.asyncio
-    async def test_get_trades_empty(self, client: AsyncClient, auth_headers: dict):
+    async def test_get_trades_empty(self, client: AsyncClient, auth_headers: dict, test_user):
         """Test getting empty trades list."""
         response = await client.get("/trades/", headers=auth_headers)
         assert response.status_code == 200
