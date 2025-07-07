@@ -38,6 +38,10 @@ WORKDIR /app
 # Copy application code
 COPY . .
 
+# Copy entrypoint script and set permissions (before switching user)
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Change ownership to appuser
 RUN chown -R appuser:appuser /app
 
@@ -57,10 +61,6 @@ ENV USE_TESTNET=false
 ENV DEBUG=false
 ENV HOST=0.0.0.0
 ENV PORT=8000
-
-# Copy entrypoint script
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
 
 # Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
