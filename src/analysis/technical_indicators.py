@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import logging
 from datetime import datetime
+from src.utils.type_converter import convert_numpy_output, convert_numpy_types
 
 logger = logging.getLogger("robot-crypt")
 
@@ -337,6 +338,7 @@ class TechnicalIndicators:
             return pd.DataFrame(), None
     
     @staticmethod
+    @convert_numpy_output
     def calculate_all_indicators(klines):
         """
         Calcula todos os indicadores técnicos disponíveis
@@ -428,6 +430,9 @@ class TechnicalIndicators:
             
             # Adiciona análise técnica agregada (possíveis sinais)
             latest_data['technical_signals'] = TechnicalIndicators.analyze_signals(latest_data)
+            
+            # Converte tipos numpy para tipos nativos do Python
+            latest_data = convert_numpy_types(latest_data)
             
             return latest_data
             
