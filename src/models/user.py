@@ -32,6 +32,9 @@ class User(Base):
     portfolio_projections = relationship("PortfolioProjection", back_populates="user")
     portfolio_reports = relationship("PortfolioReport", back_populates="user")
     
+    # Trading relationships
+    trading_sessions = relationship("TradingSession", back_populates="user")
+    
     # Legacy relationships (may be removed in future)
     portfolios = relationship("Portfolio", back_populates="owner")
     trades = relationship("Trade", back_populates="user")
