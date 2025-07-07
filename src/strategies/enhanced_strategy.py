@@ -17,10 +17,10 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from utils.utils import format_symbol
-from analysis.symbol_analyzer import SymbolAnalyzer, analyze_symbol
-from strategies.strategy import TradingStrategy, ScalpingStrategy, SwingTradingStrategy
-from ai import LLMNewsAnalyzer, HybridPricePredictor, AdvancedPatternDetector
+from src.utils.utils import format_symbol
+from src.analysis.symbol_analyzer import SymbolAnalyzer, analyze_symbol
+from src.strategies.strategy import TradingStrategy, ScalpingStrategy, SwingTradingStrategy
+from src.ai import LLMNewsAnalyzer, HybridPricePredictor, AdvancedPatternDetector
 
 logger = logging.getLogger("robot-crypt")
 
@@ -50,7 +50,7 @@ class EnhancedTradingStrategy(TradingStrategy):
             self.price_predictor = HybridPricePredictor()
             self.pattern_detector = AdvancedPatternDetector()
             # Importa NewsIntegrator
-            from ai.news_integrator import NewsIntegrator
+            from src.ai.news_integrator import NewsIntegrator
             self.news_integrator = NewsIntegrator()
             self.ai_enabled = True
             self.logger.info("Módulos de IA LLM inicializados com sucesso")
