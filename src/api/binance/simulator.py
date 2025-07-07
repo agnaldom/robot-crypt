@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Union
 from decimal import Decimal, ROUND_DOWN
 
-from core.logging_setup import logger
+from src.core.logging_setup import logger
 
 
 class BinanceSimulatorException(Exception):
@@ -294,6 +294,26 @@ class BinanceSimulator:
                             "minQty": "0.00010000",
                             "maxQty": "9000.00000000",
                             "stepSize": "0.00010000"
+                        },
+                        {
+                            "filterType": "PRICE_FILTER",
+                            "minPrice": "0.01000000",
+                            "maxPrice": "1000000.00000000",
+                            "tickSize": "0.01000000"
+                        }
+                    ]
+                },
+                {
+                    "symbol": "BNBUSDT",
+                    "status": "TRADING",
+                    "baseAsset": "BNB",
+                    "quoteAsset": "USDT",
+                    "filters": [
+                        {
+                            "filterType": "LOT_SIZE",
+                            "minQty": "0.00100000",
+                            "maxQty": "9000.00000000",
+                            "stepSize": "0.00100000"
                         },
                         {
                             "filterType": "PRICE_FILTER",
