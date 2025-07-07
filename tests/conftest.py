@@ -76,6 +76,11 @@ async def test_db(test_session_factory) -> AsyncGenerator[AsyncSession, None]:
 async def client(test_db) -> AsyncGenerator[AsyncClient, None]:
     """Create test client with database override only (no auth override)."""
     from httpx import ASGITransport
+    import os
+    
+    # Configure test environment
+    os.environ["DEBUG"] = "True"
+    os.environ["RATE_LIMIT_PER_MINUTE"] = "10000"  # High limit for tests
     
     async def override_get_database():
         yield test_db
@@ -94,6 +99,11 @@ async def authenticated_client(test_db, mock_current_user) -> AsyncGenerator[Asy
     """Create test client with both database and auth dependency overrides."""
     from httpx import ASGITransport
     from src.core.security import get_current_user
+    import os
+    
+    # Configure test environment
+    os.environ["DEBUG"] = "True"
+    os.environ["RATE_LIMIT_PER_MINUTE"] = "10000"  # High limit for tests
     
     async def override_get_database():
         yield test_db

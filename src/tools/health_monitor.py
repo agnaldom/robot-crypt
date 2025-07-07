@@ -104,12 +104,17 @@ def check_system_health(notify_function=None, mem_threshold_pct=85, trigger_gc_a
         high_usage_procs = []
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
-                if proc.info['cpu_percent'] > 50 or proc.info['memory_percent'] > 20:
+                cpu_percent = proc.info['cpu_percent']
+                memory_percent = proc.info['memory_percent']
+                
+                # Verifica se os valores não são None antes de comparar
+                if ((cpu_percent is not None and cpu_percent > 50) or 
+                    (memory_percent is not None and memory_percent > 20)):
                     high_usage_procs.append({
                         'pid': proc.info['pid'],
                         'name': proc.info['name'],
-                        'cpu': proc.info['cpu_percent'],
-                        'memory': proc.info['memory_percent']
+                        'cpu': cpu_percent if cpu_percent is not None else 0.0,
+                        'memory': memory_percent if memory_percent is not None else 0.0
                     })
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass

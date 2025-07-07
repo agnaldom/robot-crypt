@@ -1,0 +1,109 @@
+version: '3.8'
+
+services:
+  robot-crypt-api:
+    build: .
+    container_name: robot-crypt-api
+    ports:
+      - "8000:8000"
+    environment:
+      # Configurações básicas
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DEBUG=false
+      - SIMULATION_MODE=true
+      - USE_TESTNET=false
+      
+      # Configurações de log melhoradas
+      - LOG_LEVEL=info           # debug, info, warning, error
+      - LOG_FORMAT=structured    # structured ou simple
+      - LOG_COLORS=true          # true para logs coloridos
+      - SHOW_SYSTEM_INFO=true    # mostrar informações do sistema
+      
+      # Configurações do banco de dados
+      - DATABASE_URL=postgresql://user:password@localhost:5432/robot_crypt
+      
+      # Configurações do Redis (opcional)
+      - REDIS_URL=redis://localhost:6379/0
+      
+    # Volumes para desenvolvimento
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+    
+    # Comando para iniciar a API
+    command: ["api"]
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  robot-crypt-bot:
+    build: .
+    container_name: robot-crypt-bot
+    environment:
+      # Configurações básicas
+      - DEBUG=false
+      - SIMULATION_MODE=true
+      - USE_TESTNET=false
+      
+      # Configurações de log melhoradas
+      - LOG_LEVEL=info           # debug, info, warning, error
+      - LOG_FORMAT=structured    # structured ou simple
+      - LOG_COLORS=true          # true para logs coloridos
+      - SHOW_SYSTEM_INFO=true    # mostrar informações do sistema
+      
+      # Configurações do banco de dados
+      - DATABASE_URL=postgresql://user:password@localhost:5432/robot_crypt
+      
+      # Configurações do Redis (opcional)
+      - REDIS_URL=redis://localhost:6379/0
+      
+    # Volumes para desenvolvimento
+    volumes:
+      - .:/app
+      - /app/__pycache__
+      - /app/.pytest_cache
+    
+    # Comando para iniciar o bot
+    command: ["robot"]
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Depends on API
+    depends_on:
+      - robot-crypt-api
+
+  # Banco de dados PostgreSQL
+  postgres:
+    image: postgres:15
+    container_name: robot-crypt-db
+    environment:
+      - POSTGRES_DB=robot_crypt
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  # Redis para cache (opcional)
+  redis:
+    image: redis:7-alpine
+    container_name: robot-crypt-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

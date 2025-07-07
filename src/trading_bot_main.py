@@ -436,6 +436,20 @@ def main():
         logger.info("Finalizando Bot devido a erro de autenticação")
         return
     
+    # Inicializa o gerenciador de carteira para cálculo preciso de saldo
+    user_id = os.environ.get("WALLET_USER_ID", "default_user")
+    wallet_manager = None
+    
+    try:
+        if not config.simulation_mode:  # Só inicializa WalletManager se não estiver em simulação
+            logger.info("Inicializando gerenciador de carteira para cálculo de saldo...")
+            wallet_manager = WalletManager(binance_api=binance, postgres_manager=db)
+            logger.info("Gerenciador de carteira inicializado com sucesso")
+    except Exception as wallet_error:
+        logger.warning(f"Erro ao inicializar gerenciador de carteira: {str(wallet_error)}")
+        logger.info("Continuando com método de cálculo de saldo alternativo")
+        wallet_manager = None
+    
     # Verifica saldo da conta
     try:
         max_retries = 3
@@ -476,15 +490,36 @@ def main():
             logger.warning("Dados da conta vazios ou não contêm o campo 'balances' com valores. Usando saldo padrão.")
             # Não mostra a estrutura JSON para evitar erro se account_info for None
         
-        # Obtém o saldo total da conta em BRL/USDT ou usa valor padrão
-        logger.info("Calculando saldo total convertido...")
+        # Obtém o saldo total da conta usando WalletManager para valores reais
+        logger.info("Calculando saldo total com preços reais da API...")
+        capital = 100.0  # Valor padrão
+        
         try:
-            # Tenta obter o saldo real
-            capital = config.get_balance(account_info) if account_info else 100.0
-        except Exception:
-            # Se falhar por qualquer motivo, usa valor padrão
-            logger.warning("Erro ao calcular saldo. Usando valor padrão.")
-            capital = 100.0
+            if wallet_manager:
+                # Usa o WalletManager para obter valores reais da API
+                wallet_data = wallet_manager.get_wallet_balance(user_id, store=False)
+                if wallet_data and 'total_usdt_value' in wallet_data:
+                    # Converte USDT para BRL usando taxa atual aproximada
+                    usdt_to_brl = 5.0  # Taxa aproximada, pode ser melhorada futuramente
+                    capital = wallet_data['total_usdt_value'] * usdt_to_brl
+                    logger.info(f"Saldo obtido do WalletManager: {wallet_data['total_usdt_value']:.2f} USDT")
+                else:
+                    logger.warning("WalletManager não retornou dados válidos, usando método de backup...")
+                    # Fallback para o método da configuração
+                    capital = config.get_balance(account_info) if account_info else 100.0
+            else:
+                logger.warning("WalletManager não disponível, usando método de configuração...")
+                # Fallback para o método da configuração
+                capital = config.get_balance(account_info) if account_info else 100.0
+        except Exception as e:
+            logger.error(f"Erro ao calcular saldo com WalletManager: {str(e)}")
+            logger.warning("Tentando método de backup...")
+            try:
+                # Fallback para o método da configuração
+                capital = config.get_balance(account_info) if account_info else 100.0
+            except Exception:
+                logger.warning("Erro no método de backup também. Usando valor padrão.")
+                capital = 100.0
             
         logger.info(f"Saldo total convertido: R${capital:.2f}")
         
@@ -964,9 +999,12 @@ def main():
                         logger.info("Executando verificação de saúde do sistema...")
                         # Usando a função importada de health_monitor
                         health_metrics = check_system_health()
-                        if health_metrics and health_metrics.get('memory_percent', 0) > 80:
-                            logger.warning(f"Uso de memória elevado: {health_metrics['memory_percent']}% - Coletando lixo")
-                            gc.collect()
+                        
+                        if health_metrics:
+                            memory_percent = health_metrics.get('memory_percent')
+                            if memory_percent is not None and memory_percent > 80:
+                                logger.warning(f"Uso de memória elevado: {memory_percent}% - Coletando lixo")
+                                gc.collect()
                     
                     # Prepara o estado para ser salvo
                     state_to_save = {
@@ -1038,10 +1076,13 @@ def main():
                         try:
                             health_metrics = check_system_health(notifier.notify_status if notifier else None)
                             log_process_tree()
-                            if health_metrics and health_metrics['memory_percent'] > 85:
-                                logger.warning(f"Uso de memória alto: {health_metrics['memory_percent']}% - Forçando coleta de lixo")
-                                import gc
-                                gc.collect()
+                            
+                            if health_metrics:
+                                memory_percent = health_metrics.get('memory_percent')
+                                if memory_percent is not None and memory_percent > 85:
+                                    logger.warning(f"Uso de memória alto: {memory_percent}% - Forçando coleta de lixo")
+                                    import gc
+                                    gc.collect()
                         except Exception as e:
                             logger.error(f"Erro na verificação de saúde do sistema: {str(e)}")
                     

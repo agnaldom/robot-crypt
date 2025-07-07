@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.security import get_current_active_user, get_current_active_superuser
 from src.database.database import get_database
 from src.schemas.trade import (
-    Trade, TradeCreate, TradeUpdate, TradeExecution, 
+    Trade, TradeCreate, TradeCreateRequest, TradeResponse, TradeUpdate, TradeExecution, 
     TradeSignal, TradePerformance
 )
 from src.schemas.user import User
@@ -26,6 +26,9 @@ async def read_trades(
     skip: int = 0,
     limit: int = 100,
     asset_id: Optional[int] = Query(None, description="Filter by asset ID"),
+    symbol: Optional[str] = Query(None, description="Filter by symbol"),
+    side: Optional[str] = Query(None, description="Filter by side (buy/sell)"),
+    exchange: Optional[str] = Query(None, description="Filter by exchange"),
     trade_type: Optional[str] = Query(None, description="Filter by trade type"),
     status: Optional[str] = Query(None, description="Filter by status"),
     date_from: Optional[datetime] = Query(None, description="Filter from date"),
@@ -54,9 +57,9 @@ async def read_trades(
     return trades
 
 
-@router.post("/", response_model=Trade)
+@router.post("/", response_model=TradeResponse, status_code=status.HTTP_201_CREATED)
 async def create_trade(
-    trade_in: TradeCreate,
+    trade_request: TradeCreateRequest,
     db: AsyncSession = Depends(get_database),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
@@ -64,13 +67,64 @@ async def create_trade(
     Create new trade.
     """
     trade_service = TradeService(db)
+    asset_service = AssetService(db)
     
-    # Set user_id to current user if not superuser
-    if not current_user.is_superuser:
-        trade_in.user_id = current_user.id
+    # Convert trade request to internal format
+    # First, find or create the asset
+    asset = await asset_service.get_by_symbol(trade_request.symbol)
+    if not asset:
+        # Create asset if it doesn't exist
+        from src.schemas.asset import AssetCreate
+        asset_data = AssetCreate(
+            symbol=trade_request.symbol,
+            name=trade_request.symbol.replace('USDT', '').replace('BTC', ''),
+            type="cryptocurrency",
+            metadata={"exchange": trade_request.exchange}
+        )
+        asset = await asset_service.create(asset_data)
+    
+    # Convert string values to float
+    quantity = float(trade_request.quantity)
+    price = float(trade_request.price)
+    total_value = quantity * price
+    
+    # Create TradeCreate object
+    trade_in = TradeCreate(
+        user_id=current_user.id,
+        asset_id=asset.id,
+        trade_type=trade_request.side,
+        quantity=quantity,
+        price=price,
+        total_value=total_value,
+        fee=total_value * 0.001,  # 0.1% fee
+        status="pending",
+        notes=trade_request.notes,
+        metadata={
+            "exchange": trade_request.exchange,
+            "stop_loss": float(trade_request.stop_loss) if trade_request.stop_loss else None,
+            "take_profit": float(trade_request.take_profit) if trade_request.take_profit else None,
+        }
+    )
     
     trade = await trade_service.create(trade_in)
-    return trade
+    
+    # Construct TradeResponse with expected fields
+    return TradeResponse(
+        id=trade.id,
+        symbol=trade_request.symbol,
+        side=trade_request.side,
+        quantity=trade.quantity,
+        price=trade.price,
+        total_value=trade.total_value,
+        fee=trade.fee,
+        status=trade.status,
+        exchange=trade_request.exchange,
+        stop_loss=float(trade_request.stop_loss) if trade_request.stop_loss else None,
+        take_profit=float(trade_request.take_profit) if trade_request.take_profit else None,
+        notes=trade.notes,
+        created_at=trade.executed_at,
+        executed_at=trade.executed_at
+    )
 
 
 @router.post("/execute", response_model=dict)

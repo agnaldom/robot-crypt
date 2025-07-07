@@ -26,7 +26,7 @@ class TestTradesEndpoints:
         assert response.json() == []
     
     @pytest.mark.asyncio
-    async def test_create_buy_trade(self, client: AsyncClient, auth_headers: dict):
+    async def test_create_buy_trade(self, authenticated_client: AsyncClient):
         """Test creating a buy trade."""
         trade_data = {
             "symbol": "BTCUSDT",
@@ -36,7 +36,7 @@ class TestTradesEndpoints:
             "exchange": "binance"
         }
         
-        response = await client.post("/trades/", json=trade_data, headers=auth_headers)
+        response = await authenticated_client.post("/trades/", json=trade_data)
         assert response.status_code == 201
         
         data = response.json()
@@ -51,7 +51,7 @@ class TestTradesEndpoints:
         assert "created_at" in data
     
     @pytest.mark.asyncio
-    async def test_create_sell_trade(self, client: AsyncClient, auth_headers: dict):
+    async def test_create_sell_trade(self, authenticated_client: AsyncClient):
         """Test creating a sell trade."""
         trade_data = {
             "symbol": "ETHUSDT",
@@ -61,7 +61,7 @@ class TestTradesEndpoints:
             "exchange": "binance"
         }
         
-        response = await client.post("/trades/", json=trade_data, headers=auth_headers)
+        response = await authenticated_client.post("/trades/", json=trade_data)
         assert response.status_code == 201
         
         data = response.json()
@@ -74,7 +74,7 @@ class TestTradesEndpoints:
         assert float(data["total_value"]) == 1000.0  # 0.5 * 2000
     
     @pytest.mark.asyncio
-    async def test_create_trade_with_stop_loss(self, client: AsyncClient, auth_headers: dict):
+    async def test_create_trade_with_stop_loss(self, authenticated_client: AsyncClient):
         """Test creating a trade with stop loss."""
         trade_data = {
             "symbol": "ADAUSDT",
@@ -85,7 +85,7 @@ class TestTradesEndpoints:
             "stop_loss": "1.30"
         }
         
-        response = await client.post("/trades/", json=trade_data, headers=auth_headers)
+        response = await authenticated_client.post("/trades/", json=trade_data)
         assert response.status_code == 201
         
         data = response.json()
@@ -94,7 +94,7 @@ class TestTradesEndpoints:
         assert float(data["total_value"]) == 150.0  # 100 * 1.50
     
     @pytest.mark.asyncio
-    async def test_create_trade_with_take_profit(self, client: AsyncClient, auth_headers: dict):
+    async def test_create_trade_with_take_profit(self, authenticated_client: AsyncClient):
         """Test creating a trade with take profit."""
         trade_data = {
             "symbol": "DOTUSDT",
@@ -105,7 +105,7 @@ class TestTradesEndpoints:
             "take_profit": "25.00"
         }
         
-        response = await client.post("/trades/", json=trade_data, headers=auth_headers)
+        response = await authenticated_client.post("/trades/", json=trade_data)
         assert response.status_code == 201
         
         data = response.json()
@@ -114,7 +114,7 @@ class TestTradesEndpoints:
         assert float(data["total_value"]) == 200.0  # 10 * 20
     
     @pytest.mark.asyncio
-    async def test_create_trade_invalid_data(self, client: AsyncClient, auth_headers: dict):
+    async def test_create_trade_invalid_data(self, authenticated_client: AsyncClient):
         """Test creating trade with invalid data."""
         invalid_data = {
             "symbol": "",
@@ -124,7 +124,7 @@ class TestTradesEndpoints:
             "exchange": ""
         }
         
-        response = await client.post("/trades/", json=invalid_data, headers=auth_headers)
+        response = await authenticated_client.post("/trades/", json=invalid_data)
         assert response.status_code == 422
     
     @pytest.mark.asyncio

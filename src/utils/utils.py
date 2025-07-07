@@ -984,8 +984,9 @@ def validate_order_parameters(symbol, side, order_type, quantity, price, binance
                 result['valid'] = False
                 result['errors'].append(f"Quantidade {quantity} acima do máximo {max_qty}")
             else:
-                # Ajusta quantidade para múltiplo do step size
-                corrected_qty = round(quantity / step_size) * step_size
+                # Ajusta quantidade para múltiplo do step size (arredonda para baixo para ser conservador)
+                import math
+                corrected_qty = math.floor(quantity / step_size) * step_size
                 if abs(corrected_qty - quantity) > step_size * 0.01:
                     result['corrected_quantity'] = corrected_qty
                     result['warnings'].append(f"Quantidade ajustada de {quantity} para {corrected_qty}")
@@ -1005,8 +1006,9 @@ def validate_order_parameters(symbol, side, order_type, quantity, price, binance
             
             # Ajusta para step size se disponível
             if lot_size_filter:
+                import math
                 step_size = float(lot_size_filter['stepSize'])
-                min_required_qty = round(min_required_qty / step_size) * step_size
+                min_required_qty = math.ceil(min_required_qty / step_size) * step_size
                 min_required_qty = max(min_required_qty, float(lot_size_filter['minQty']))
             
             result['corrected_quantity'] = min_required_qty

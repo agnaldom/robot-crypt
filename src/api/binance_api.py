@@ -360,8 +360,9 @@ class BinanceAPI:
         
         # Adiciona parâmetros específicos de acordo com o tipo de ordem
         if quantity:
-            # Garante que a quantidade não está em notação científica
-            params['quantity'] = f"{float(quantity):.8f}".rstrip('0').rstrip('.')
+            # Formatação inteligente da quantidade baseada no step size do símbolo
+            formatted_quantity = self._format_quantity_for_symbol(quantity, symbol)
+            params['quantity'] = formatted_quantity
             
         if price and type.upper() != 'MARKET':
             # Garante que o preço não está em notação científica
@@ -371,6 +372,68 @@ class BinanceAPI:
             params['timeInForce'] = time_in_force
         
         return self._make_request('POST', endpoint, params, signed=True)
+
+    def _format_quantity_for_symbol(self, quantity, symbol):
+        """
+        Formatação e ajuste inteligente da quantidade baseado no step size
+        """
+        try:
+            # Regras hardcoded para símbolos conhecidos quando a API falha
+            hardcoded_rules = {
+                'DOGEUSDT': {'step_size': 1.0},  # DOGE requer números inteiros
+                'SHIBUSDT': {'step_size': 1.0},  # SHIB também requer números inteiros
+                'PEPEUSDT': {'step_size': 1.0},  # PEPE também requer números inteiros
+            }
+            
+            symbol_info = None
+            try:
+                symbol_info = self.get_symbol_info(symbol)
+            except Exception:
+                # Se falhar ao obter symbol_info, usa regras hardcoded
+                pass
+            
+            step_size = None
+            
+            if symbol_info:
+                # Tenta obter step size da API
+                for f in symbol_info.get("filters", []):
+                    if f.get("filterType") == "LOT_SIZE":
+                        step_size = float(f.get("stepSize", 0.00000001))
+                        break
+            
+            # Se não conseguiu obter da API, usa regras hardcoded
+            if step_size is None and symbol in hardcoded_rules:
+                step_size = hardcoded_rules[symbol]['step_size']
+                self._log_structured("info", f"Usando regra hardcoded para {symbol}", {
+                    "symbol": symbol,
+                    "step_size": step_size,
+                    "reason": "api_unavailable"
+                })
+            
+            if step_size and step_size > 0:
+                # Ajusta a quantidade para o step size mais próximo (arredondando para baixo)
+                import math
+                adjusted_quantity = math.floor(quantity / step_size) * step_size
+                
+                # Para step size >= 1, retorna como inteiro
+                if step_size >= 1:
+                    return str(int(adjusted_quantity))
+                else:
+                    # Para step size menor que 1, usa precision adequada
+                    decimal_places = len(str(step_size).split('.')[-1].rstrip('0'))
+                    return f"{adjusted_quantity:.{decimal_places}f}"
+            else:
+                # Fallback para formatação padrão
+                return f"{float(quantity):.8f}".rstrip('0').rstrip('.')
+                
+        except Exception as e:
+            # Em caso de erro, usa a formatação padrão
+            self._log_structured("warning", f"Erro ao formatar quantidade para {symbol}: {str(e)}", {
+                "symbol": symbol,
+                "quantity": quantity,
+                "fallback": "default_formatting"
+            })
+            return f"{float(quantity):.8f}".rstrip('0').rstrip('.')
     
     def get_order(self, symbol, order_id):
         """Obtém informações sobre uma ordem específica"""

@@ -115,7 +115,7 @@ class SymbolAnalyzer:
         # Configurações de análise
         self.config = {
             'default_limit': 100,
-            'min_confidence_threshold': 0.6,
+            'min_confidence_threshold': 0.5,  # Reduzido de 0.6 para 0.5
             'signal_expiry_minutes': 15,
             'volatility_window': 20,
             'volume_threshold_multiplier': 1.5
@@ -474,6 +474,39 @@ class SymbolAnalyzer:
                 )
                 signals.append(signal)
             
+            # Sinais adicionais baseados em tendência geral
+            trend_signal = tech_data.get('technical_signals', {}).get('overall_trend', 'neutral')
+            trend_strength = tech_data.get('technical_signals', {}).get('trend_strength', 0.0)
+            
+            # Gera sinal baseado em tendência forte
+            if trend_signal == 'strong_bullish' and trend_strength > 0.6:
+                signal = TradingSignal(
+                    symbol=symbol,
+                    signal_type='buy',
+                    strength=0.6,
+                    confidence=0.55,
+                    price=current_price,
+                    timestamp=datetime.now(),
+                    reasoning=f"Tendência fortemente bullish (força: {trend_strength:.2f})",
+                    indicators_data={'trend': trend_signal, 'strength': trend_strength},
+                    source='technical_trend'
+                )
+                signals.append(signal)
+            
+            elif trend_signal == 'strong_bearish' and trend_strength < -0.6:
+                signal = TradingSignal(
+                    symbol=symbol,
+                    signal_type='sell',
+                    strength=0.6,
+                    confidence=0.55,
+                    price=current_price,
+                    timestamp=datetime.now(),
+                    reasoning=f"Tendência fortemente bearish (força: {trend_strength:.2f})",
+                    indicators_data={'trend': trend_signal, 'strength': trend_strength},
+                    source='technical_trend'
+                )
+                signals.append(signal)
+            
             return signals
             
         except Exception as e:
@@ -489,18 +522,37 @@ class SymbolAnalyzer:
             
             if volume_analysis.get('volume_spike', False):
                 # Volume anormalmente alto pode indicar movimento forte
-                signal_type = 'buy' if volume_analysis.get('price_trend', 'neutral') == 'up' else 'sell'
+                price_trend = volume_analysis.get('price_trend', 'neutral')
+                signal_type = 'buy' if price_trend == 'up' else 'sell' if price_trend == 'down' else 'hold'
+                
+                confidence = 0.65 if price_trend != 'neutral' else 0.5
                 
                 signal = TradingSignal(
                     symbol=symbol,
                     signal_type=signal_type,
                     strength=0.6,
-                    confidence=0.65,
+                    confidence=confidence,
                     price=current_price,
                     timestamp=datetime.now(),
-                    reasoning=f"Pico de volume detectado com tendência {volume_analysis.get('price_trend', 'neutral')}",
+                    reasoning=f"Pico de volume detectado com tendência {price_trend}",
                     indicators_data={'volume': volume_analysis},
                     source='volume_spike'
+                )
+                signals.append(signal)
+            
+            # Sinal adicional baseado na tendência de volume
+            volume_trend = volume_analysis.get('volume_trend', 'neutral')
+            if volume_trend == 'increasing':
+                signal = TradingSignal(
+                    symbol=symbol,
+                    signal_type='buy',
+                    strength=0.5,
+                    confidence=0.55,
+                    price=current_price,
+                    timestamp=datetime.now(),
+                    reasoning="Volume crescente detectado - possível movimento de alta",
+                    indicators_data={'volume': volume_analysis},
+                    source='volume_trend'
                 )
                 signals.append(signal)
             

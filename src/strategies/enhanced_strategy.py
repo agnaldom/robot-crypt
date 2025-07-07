@@ -64,7 +64,7 @@ class EnhancedTradingStrategy(TradingStrategy):
         
         # Configurações de análise
         self.analysis_config = {
-            'min_confidence_threshold': 0.7,  # Confiança mínima para sinais
+            'min_confidence_threshold': 0.6,  # Confiança mínima para sinais (reduzido de 0.7)
             'timeframe': '1h',                # Timeframe padrão para análise
             'analysis_limit': 100,            # Número de candles para análise
             'use_ai_signals': True,           # Se deve usar sinais da IA
@@ -256,7 +256,7 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
         # Configurações específicas do scalping com IA
         self.analysis_config.update({
             'timeframe': '15m',           # Timeframe mais curto para scalping
-            'min_confidence_threshold': 0.75,  # Maior confiança para scalping
+            'min_confidence_threshold': 0.65,  # Reduzido de 0.75 para 0.65
             'use_volume_analysis': True,  # Importante para scalping
             'use_volatility_analysis': True
         })
@@ -296,6 +296,7 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                 traditional_result=traditional_result,
                 ai_signals=ai_signals,
                 risk_assessment=risk_assessment,
+                ai_analysis=ai_analysis,
                 symbol=symbol
             )
             
@@ -309,6 +310,7 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
     def _combine_traditional_and_ai_analysis(self, traditional_result: Tuple, 
                                            ai_signals: List[Dict], 
                                            risk_assessment: Dict,
+                                           ai_analysis: Dict,
                                            symbol: str) -> Tuple:
         """
         Combina análise tradicional com sinais da IA
@@ -327,7 +329,18 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
         try:
             # Se não há sinais da IA, usa análise tradicional
             if not ai_signals:
-                self.logger.info(f"{symbol}: Sem sinais IA válidos, usando análise tradicional")
+                self.logger.info(f"[{symbol}]: Sem sinais IA válidos, usando análise tradicional")
+                # Diagnóstico: vamos verificar se há sinais com confiança menor
+                all_signals = ai_analysis.get('signals', [])
+                if all_signals:
+                    low_confidence_signals = [s for s in all_signals if s.confidence < self.analysis_config['min_confidence_threshold']]
+                    if low_confidence_signals:
+                        best_low = max(low_confidence_signals, key=lambda s: s.confidence)
+                        self.logger.info(f"[{symbol}]: Melhor sinal de baixa confiança: {best_low.signal_type} ({best_low.confidence:.2%}) - {best_low.reasoning}")
+                    else:
+                        self.logger.info(f"[{symbol}]: Nenhum sinal gerado pela análise IA")
+                else:
+                    self.logger.info(f"[{symbol}]: Lista de sinais IA está vazia")
                 return traditional_result
             
             # Pega o sinal de maior confiança da IA

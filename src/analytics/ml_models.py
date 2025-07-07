@@ -69,8 +69,9 @@ class MLModels:
         
         # Selecionar colunas de features
         if feature_columns is None:
-            feature_columns = [col for col in df.select_dtypes(include=[np.number]).columns 
-                             if col != target_column]
+            # Selecionar apenas colunas numéricas, excluindo target
+            numeric_columns = df.select_dtypes(include=[np.number]).columns.tolist()
+            feature_columns = [col for col in numeric_columns if col != target_column]
         
         # Criar features de lag
         for lag in range(1, lag_features + 1):
@@ -100,8 +101,10 @@ class MLModels:
         df = df.dropna()
         
         # Separar features e target
+        # Manter apenas colunas numéricas nas features finais
         feature_cols = [col for col in df.columns if col != target_column]
-        X = df[feature_cols]
+        numeric_feature_cols = df[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
+        X = df[numeric_feature_cols]
         y = df[target_column]
         
         return X, y

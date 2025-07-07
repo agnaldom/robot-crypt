@@ -5,7 +5,7 @@ Trade schemas for Robot-Crypt API.
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class TradeBase(BaseModel):
@@ -27,6 +27,29 @@ class TradeCreate(TradeBase):
     pass
 
 
+class TradeCreateRequest(BaseModel):
+    """Schema for creating a trade with simplified input."""
+    symbol: str = Field(..., min_length=1, description="Trading symbol (e.g., BTCUSDT)")
+    side: str = Field(..., pattern="^(buy|sell)$", description="Trade side (buy/sell)")
+    quantity: str = Field(..., min_length=1, description="Trade quantity as string")
+    price: str = Field(..., min_length=1, description="Trade price as string")
+    exchange: str = Field(..., min_length=1, description="Exchange name")
+    stop_loss: Optional[str] = Field(None, description="Stop loss price as string")
+    take_profit: Optional[str] = Field(None, description="Take profit price as string")
+    notes: Optional[str] = Field(None, description="Trade notes")
+    
+    @field_validator('quantity', 'price')
+    @classmethod
+    def validate_positive_numbers(cls, v):
+        try:
+            value = float(v)
+            if value <= 0:
+                raise ValueError('Value must be positive')
+            return v
+        except (ValueError, TypeError):
+            raise ValueError('Must be a valid positive number')
+
+
 class TradeUpdate(BaseModel):
     """Schema for updating a trade."""
     status: Optional[str] = None
@@ -45,6 +68,26 @@ class Trade(TradeBase):
     profit_loss_percentage: Optional[float]
     executed_at: datetime
 
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TradeResponse(BaseModel):
+    """Enhanced trade response schema with additional fields."""
+    id: int
+    symbol: str
+    side: str
+    quantity: float
+    price: float
+    total_value: float
+    fee: float
+    status: str
+    exchange: str
+    stop_loss: Optional[float] = None
+    take_profit: Optional[float] = None
+    notes: Optional[str] = None
+    created_at: datetime
+    executed_at: datetime
+    
     model_config = ConfigDict(from_attributes=True)
 
 
