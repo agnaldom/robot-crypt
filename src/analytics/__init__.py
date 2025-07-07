@@ -2,11 +2,11 @@
 Analytics Module for Advanced Trading Analytics and Reporting
 """
 
-from .advanced_analytics import AdvancedAnalytics
-from .ml_models import MLModels
-from .backtesting_engine import BacktestingEngine
-from .risk_analytics import RiskAnalytics
-from .report_generator import ReportGenerator
+from src.analytics.advanced_analytics import AdvancedAnalytics
+from src.analytics.ml_models import MLModels
+from src.analytics.backtesting_engine import BacktestingEngine
+from src.analytics.risk_analytics import RiskAnalytics
+from src.analytics.report_generator import ReportGenerator
 
 __all__ = [
     'AdvancedAnalytics',
