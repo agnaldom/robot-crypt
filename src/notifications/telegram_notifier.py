@@ -16,13 +16,13 @@ import certifi
 
 # Importa o notificador local como fallback
 try:
-    from .local_notifier import LocalNotifier
+    from src.notifications.local_notifier import LocalNotifier
 except ImportError:
     LocalNotifier = None
 
 # Importa o gerenciador PostgreSQL se estiver disponível
 try:
-    from ..database.postgres_manager import PostgresManager
+    from src.database.postgres_manager import PostgresManager
     postgres_available = True
 except ImportError:
     postgres_available = False
