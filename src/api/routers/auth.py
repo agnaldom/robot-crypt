@@ -48,6 +48,14 @@ async def login_for_access_token(
     }
 
 
+@router.get("/me", response_model=User)
+async def get_current_user_info(current_user: User = Depends(get_current_user)) -> Any:
+    """
+    Get current user information.
+    """
+    return current_user
+
+
 @router.post("/test-token", response_model=User)
 async def test_token(current_user: User = Depends(get_current_user)) -> Any:
     """
