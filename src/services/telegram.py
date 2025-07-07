@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Import the existing TelegramNotifier
 try:
-    from ..notifications.telegram_notifier import TelegramNotifier
+    from src.notifications.telegram_notifier import TelegramNotifier
 except ImportError:
     TelegramNotifier = None
 
