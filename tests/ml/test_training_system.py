@@ -407,8 +407,7 @@ class TestTradingModel:
 class TestTradingTrainer:
     """Test cases for TradingTrainer class."""
     
-    @patch('src.ml.training_system.MarketDataAggregator')
-    def setup_method(self, mock_aggregator):
+    def setup_method(self):
         """Set up test trainer."""
         self.trainer = TradingTrainer()
     
