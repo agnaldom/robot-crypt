@@ -6,7 +6,7 @@ import sys
 import threading
 from typing import Callable, Dict, Optional
 
-from .logging_setup import logger
+from src.logging_setup import logger
 
 
 class SignalHandler:
