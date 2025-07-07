@@ -66,7 +66,10 @@ app = FastAPI(
 # Add security middlewares (order matters!)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SecurityMonitoringMiddleware)
-app.add_middleware(RateLimitMiddleware, calls=settings.RATE_LIMIT_PER_MINUTE, period=60)
+
+# Only apply rate limiting in production
+if not settings.DEBUG:
+    app.add_middleware(RateLimitMiddleware, calls=settings.RATE_LIMIT_PER_MINUTE, period=60)
 
 # Add trusted host middleware
 if not settings.DEBUG:
