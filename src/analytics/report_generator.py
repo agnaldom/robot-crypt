@@ -14,10 +14,10 @@ from plotly.subplots import make_subplots
 import plotly.io as pio
 from jinja2 import Template
 
-from .advanced_analytics import AdvancedAnalytics
-from .ml_models import MLModels
-from .backtesting_engine import BacktestingEngine
-from .risk_analytics import RiskAnalytics
+from src.analytics.advanced_analytics import AdvancedAnalytics
+from src.analytics.ml_models import MLModels
+from src.analytics.backtesting_engine import BacktestingEngine
+from src.analytics.risk_analytics import RiskAnalytics
 
 warnings.filterwarnings('ignore')
 
