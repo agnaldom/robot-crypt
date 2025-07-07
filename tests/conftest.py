@@ -197,12 +197,70 @@ def mock_current_user():
     )
 
 
+@pytest_asyncio.fixture
+async def test_user(test_db: AsyncSession):
+    """Create a test user in the database."""
+    user_service = UserService(test_db)
+    user_data = UserCreate(
+        email="test@example.com",
+        full_name="Test User",
+        password="testpassword123"
+    )
+    user = await user_service.create(user_data)
+    await test_db.commit()
+    return user
+
+
 @pytest.fixture
 def auth_headers():
     """Create a proper authentication header for testing."""
     # Create a test token with test user data
-    test_token = create_access_token(data={"sub": "test@example.com"})
+    test_token = create_access_token(data={"sub": "1"})
     return {"Authorization": f"Bearer {test_token}"}
+
+
+@pytest_asyncio.fixture
+async def authenticated_user_data(test_user):
+    """Create authenticated user data with token for testing."""
+    # Create a test token with user data
+    test_token = create_access_token(data={"sub": str(test_user.id)})
+    return {
+        "id": test_user.id,
+        "email": test_user.email,
+        "full_name": test_user.full_name,
+        "is_active": test_user.is_active,
+        "is_superuser": test_user.is_superuser,
+        "token": test_token,
+        "preferences": test_user.preferences or {}
+    }
+
+
+@pytest_asyncio.fixture
+async def superuser_data(test_db: AsyncSession):
+    """Create a superuser for testing."""
+    user_service = UserService(test_db)
+    user_data = UserCreate(
+        email="admin@example.com",
+        full_name="Admin User",
+        password="adminpassword123"
+    )
+    user = await user_service.create(user_data)
+    # Make the user a superuser
+    user.is_superuser = True
+    await test_db.commit()
+    
+    # Create token
+    test_token = create_access_token(data={"sub": str(user.id)})
+    
+    return {
+        "id": user.id,
+        "email": user.email,
+        "full_name": user.full_name,
+        "is_active": user.is_active,
+        "is_superuser": user.is_superuser,
+        "token": test_token,
+        "preferences": user.preferences or {}
+    }
 
 
 @pytest.fixture
