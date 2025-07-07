@@ -5,6 +5,7 @@ FROM python:3.11-slim as builder
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
@@ -23,6 +24,7 @@ FROM python:3.11-slim as production
 RUN apt-get update && apt-get install -y \
     curl \
     netcat-openbsd \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy virtual environment from builder stage
@@ -61,6 +63,11 @@ ENV USE_TESTNET=false
 ENV DEBUG=false
 ENV HOST=0.0.0.0
 ENV PORT=8000
+# Log configuration
+ENV LOG_LEVEL=info
+ENV LOG_FORMAT=structured
+ENV LOG_COLORS=true
+ENV SHOW_SYSTEM_INFO=true
 
 # Set entrypoint
 ENTRYPOINT ["/app/entrypoint.sh"]
