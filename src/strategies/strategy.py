@@ -3,6 +3,9 @@
 Módulo de estratégias de negociação para Robot-Crypt
 """
 import time
+import os
+import json
+from src.utils.utils import format_symbol, validate_order_parameters
 import logging
 import numpy as np
 from datetime import datetime, timedelta
@@ -16,7 +19,7 @@ project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from utils.utils import format_symbol
+from src.utils.utils import format_symbol
 
 class TradingStrategy:
     """Classe base para estratégias de negociação"""
