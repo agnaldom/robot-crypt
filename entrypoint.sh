@@ -4,7 +4,7 @@ set -e
 
 # Configurações padrão
 HOST=${HOST:-0.0.0.0}
-PORT=${PORT:-8000}
+PORT=${PORT:-8080}
 DEBUG=${DEBUG:-false}
 RELOAD_FLAG=${RELOAD_FLAG:-}
 LOG_LEVEL=${LOG_LEVEL:-info}
@@ -219,7 +219,7 @@ case "$1" in
         echo ""
         log_message "INFO" "📝 Variáveis de ambiente:"
         log_message "INFO" "   HOST              - Host do servidor (padrão: 0.0.0.0)"
-        log_message "INFO" "   PORT              - Porta do servidor (padrão: 8000)"
+        log_message "INFO" "   PORT              - Porta do servidor (padrão: 8080)"
         log_message "INFO" "   DEBUG             - Modo debug (padrão: false)"
         log_message "INFO" "   LOG_LEVEL         - Nível de log (padrão: info)"
         log_message "INFO" "   LOG_FORMAT        - Formato do log (padrão: structured)"
