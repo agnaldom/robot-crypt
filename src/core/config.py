@@ -98,6 +98,20 @@ class Settings(BaseSettings):
         description="Tempo de expiração do token de refresh (dias)"
     )
     
+    # === CONFIGURAÇÕES DE USUÁRIO PADRÃO ===
+    USER_EMAIL: str = Field(
+        default="admin@robotcrypt.com",
+        description="Email do superadmin"
+    )
+    USER_PASSWORD: str = Field(
+        default="Robot123!@#",
+        description="Senha do superadmin"
+    )
+    USER_NAME: str = Field(
+        default="Admin Robot-Crypt",
+        description="Nome do superadmin"
+    )
+    
     # === CONFIGURAÇÕES DO BANCO DE DADOS ===
     DATABASE_URL: str = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/robot_crypt",

@@ -461,3 +461,153 @@ async def get_portfolio_rebalancing_suggestions(
             "analysis_date": datetime.utcnow().isoformat()
         }
     }
+
+
+# ==================== Wallet Value Endpoints ====================
+
+@router.get("/wallet/total-value")
+async def get_wallet_total_value(
+    currencies: Optional[str] = Query("USD,BRL,EUR,BTC", description="Comma-separated list of currencies (USD,BRL,EUR,BTC,ETH)"),
+    db: AsyncSession = Depends(get_database),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get wallet total value in multiple currencies (USD, BRL, EUR, BTC, ETH).
+    """
+    portfolio_service = PortfolioService(db)
+    
+    # Get portfolio summary
+    summary = await portfolio_service.get_portfolio_summary(current_user.id)
+    
+    if summary["status"] != "success":
+        return {
+            "status": "empty",
+            "message": "No portfolio data available",
+            "data": {
+                "total_value_usd": 0.0,
+                "total_value_brl": 0.0,
+                "total_value_eur": 0.0,
+                "total_value_btc": 0.0,
+                "total_value_eth": 0.0,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        }
+    
+    # Get portfolio value in USD (base currency)
+    portfolio_value_usd = summary["data"]["portfolio_value"]
+    
+    # Mock exchange rates - In production, these should come from real APIs
+    exchange_rates = {
+        "USD_TO_BRL": 5.20,
+        "USD_TO_EUR": 0.85,
+        "BTC_TO_USD": 43000.0,  # Mock BTC price
+        "ETH_TO_USD": 2500.0,   # Mock ETH price
+    }
+    
+    # Parse requested currencies
+    requested_currencies = [c.strip().upper() for c in currencies.split(",")]
+    
+    # Calculate values in different currencies
+    values = {
+        "total_value_usd": portfolio_value_usd
+    }
+    
+    if "BRL" in requested_currencies:
+        values["total_value_brl"] = portfolio_value_usd * exchange_rates["USD_TO_BRL"]
+    
+    if "EUR" in requested_currencies:
+        values["total_value_eur"] = portfolio_value_usd * exchange_rates["USD_TO_EUR"]
+    
+    if "BTC" in requested_currencies:
+        values["total_value_btc"] = portfolio_value_usd / exchange_rates["BTC_TO_USD"]
+    
+    if "ETH" in requested_currencies:
+        values["total_value_eth"] = portfolio_value_usd / exchange_rates["ETH_TO_USD"]
+    
+    return {
+        "status": "success",
+        "data": {
+            **values,
+            "exchange_rates_used": exchange_rates,
+            "requested_currencies": requested_currencies,
+            "base_currency": "USD",
+            "portfolio_assets_count": summary["data"]["assets_count"],
+            "last_updated": datetime.utcnow().isoformat(),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    }
+
+
+@router.get("/wallet/value-history")
+async def get_wallet_value_history(
+    currency: str = Query("USD", description="Currency for value history (USD, BRL, EUR, BTC, ETH)"),
+    period: str = Query("month", description="Time period (week, month, quarter, year)"),
+    db: AsyncSession = Depends(get_database),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get historical wallet value in specified currency.
+    """
+    portfolio_service = PortfolioService(db)
+    
+    # Get portfolio performance data
+    performance = await portfolio_service.get_portfolio_performance(current_user.id, period)
+    
+    if performance["status"] != "success":
+        return {
+            "status": "empty",
+            "message": "No portfolio data available",
+            "data": {
+                "history": [],
+                "currency": currency.upper(),
+                "period": period
+            }
+        }
+    
+    history = performance["data"]["performance_history"]
+    
+    # Mock exchange rates for conversion
+    exchange_rates = {
+        "USD_TO_BRL": 5.20,
+        "USD_TO_EUR": 0.85,
+        "BTC_TO_USD": 43000.0,
+        "ETH_TO_USD": 2500.0,
+    }
+    
+    # Convert values to requested currency
+    converted_history = []
+    for point in history:
+        value_usd = point["value"]
+        
+        if currency.upper() == "USD":
+            converted_value = value_usd
+        elif currency.upper() == "BRL":
+            converted_value = value_usd * exchange_rates["USD_TO_BRL"]
+        elif currency.upper() == "EUR":
+            converted_value = value_usd * exchange_rates["USD_TO_EUR"]
+        elif currency.upper() == "BTC":
+            converted_value = value_usd / exchange_rates["BTC_TO_USD"]
+        elif currency.upper() == "ETH":
+            converted_value = value_usd / exchange_rates["ETH_TO_USD"]
+        else:
+            converted_value = value_usd  # Default to USD
+        
+        converted_history.append({
+            "date": point["date"],
+            "value": converted_value,
+            "value_usd": value_usd,
+            "profit_loss": point["profit_loss"],
+            "profit_loss_percentage": point["profit_loss_percentage"]
+        })
+    
+    return {
+        "status": "success",
+        "data": {
+            "history": converted_history,
+            "currency": currency.upper(),
+            "period": period,
+            "exchange_rate_used": exchange_rates.get(f"USD_TO_{currency.upper()}", 1.0),
+            "total_points": len(converted_history),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    }

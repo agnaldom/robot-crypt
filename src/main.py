@@ -47,6 +47,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
     
+    # Initialize system (create superadmin, etc.)
+    try:
+        from src.core.startup import startup_event
+        await startup_event()
+    except Exception as e:
+        logger.error(f"Error during system initialization: {e}")
+        # Não falhamos a inicialização por causa disso
+    
     yield
     
     # Cleanup

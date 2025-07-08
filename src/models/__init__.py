@@ -11,6 +11,10 @@ from src.models.risk_management import RiskManagement
 from src.models.alert import Alert
 from src.models.trade import Trade
 from src.models.report import Report
+from src.models.trading_session import TradingSession, TradingSessionLog, OpenOrder
+from src.models.price_history import PriceHistory
+from src.models.market_analysis import MarketAnalysis
+from src.models.trading_signals import TradingSignal
 
 # Portfolio-related models
 from src.models.portfolio_orm import Portfolio
@@ -33,6 +37,12 @@ __all__ = [
     "Alert",
     "Trade",
     "Report",
+    "TradingSession",
+    "TradingSessionLog",
+    "OpenOrder",
+    "PriceHistory",
+    "MarketAnalysis",
+    "TradingSignal",
     # Portfolio models
     "Portfolio",
     "PortfolioAlert",
