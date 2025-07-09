@@ -1,0 +1,27 @@
+
+# Exemplos de comandos curl para testar a API
+
+# 1. Login
+curl -X POST "http://localhost:8000/auth/login" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=test@test.com&password=test123"
+
+# 2. Portfolio Metrics
+curl -X GET "http://localhost:8000/portfolio/metrics" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1IiwiZXhwIjoxNzUxOTk1MDk5LCJpYXQiOjE3NTE5OTMyOTksIm5iZiI6MTc1MTk5MzI5OSwiaXNzIjoicm9ib3QtY3J5cHQtYXBpIiwiYXVkIjoicm9ib3QtY3J5cHQtY2xpZW50In0.06kBLklAPlRhN513uRg9V_RaaUojR8qX2SAN5m5kWM4" \
+  -H "Content-Type: application/json"
+
+# 3. Trades
+curl -X GET "http://localhost:8000/trades?limit=10" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1IiwiZXhwIjoxNzUxOTk1MDk5LCJpYXQiOjE3NTE5OTMyOTksIm5iZiI6MTc1MTk5MzI5OSwiaXNzIjoicm9ib3QtY3J5cHQtYXBpIiwiYXVkIjoicm9ib3QtY3J5cHQtY2xpZW50In0.06kBLklAPlRhN513uRg9V_RaaUojR8qX2SAN5m5kWM4" \
+  -H "Content-Type: application/json"
+
+# 4. Wallet History
+curl -X GET "http://localhost:8000/portfolio/wallet/value-history?currency=USD&period=month" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1IiwiZXhwIjoxNzUxOTk1MDk5LCJpYXQiOjE3NTE5OTMyOTksIm5iZiI6MTc1MTk5MzI5OSwiaXNzIjoicm9ib3QtY3J5cHQtYXBpIiwiYXVkIjoicm9ib3QtY3J5cHQtY2xpZW50In0.06kBLklAPlRhN513uRg9V_RaaUojR8qX2SAN5m5kWM4" \
+  -H "Content-Type: application/json"
+
+# 5. User Info
+curl -X GET "http://localhost:8000/auth/me" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1IiwiZXhwIjoxNzUxOTk1MDk5LCJpYXQiOjE3NTE5OTMyOTksIm5iZiI6MTc1MTk5MzI5OSwiaXNzIjoicm9ib3QtY3J5cHQtYXBpIiwiYXVkIjoicm9ib3QtY3J5cHQtY2xpZW50In0.06kBLklAPlRhN513uRg9V_RaaUojR8qX2SAN5m5kWM4" \
+  -H "Content-Type: application/json"

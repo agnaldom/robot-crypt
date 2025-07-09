@@ -600,6 +600,192 @@ class TelegramNotifier:
         
         return self.send_message(formatted_message)
         
+    def notify_analysis_report(self, symbol, analysis_data, timeframe=None):
+        """
+        Envia um report detalhado de análise de mercado com informações estruturadas
+        
+        Args:
+            symbol (str): O par de moedas analisado (ex: "BTC/USDT")
+            analysis_data (dict): Dados completos da análise incluindo:
+                - signals: Lista de sinais encontrados
+                - analysis_duration: Tempo de análise
+                - traditional_analysis: Resultado da análise tradicional
+                - ai_analysis: Resultado da análise de IA
+                - risk_assessment: Avaliação de risco
+                - market_sentiment: Sentimento do mercado
+                - final_decision: Decisão final tomada
+            timeframe (str, optional): Timeframe da análise (ex: "1h", "4h", "1d")
+        """
+        try:
+            # Formata a hora atual
+            current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+            
+            # Extrai dados da análise
+            signals = analysis_data.get('signals', [])
+            analysis_duration = analysis_data.get('analysis_duration', 0)
+            traditional_result = analysis_data.get('traditional_analysis', {})
+            ai_result = analysis_data.get('ai_analysis', {})
+            risk_assessment = analysis_data.get('risk_assessment', {})
+            market_sentiment = analysis_data.get('market_sentiment', {})
+            final_decision = analysis_data.get('final_decision', {})
+            
+            # Cabeçalho do report
+            timeframe_str = f" ({timeframe})" if timeframe else ""
+            signals_count = len(signals)
+            
+            # Determina emoji baseado no número de sinais
+            if signals_count == 0:
+                report_emoji = "📊"
+            elif signals_count == 1:
+                report_emoji = "🔍"
+            else:
+                report_emoji = "📈"
+            
+            # Título do report
+            message = f"{report_emoji} *ANÁLISE DE {symbol}{timeframe_str} CONCLUÍDA - {signals_count} sinais encontrados*\n"
+            message += f"⏱️ Executada em {analysis_duration:.2f}s às {current_time}\n\n"
+            
+            # Seção de sinais encontrados
+            if signals:
+                message += "🔔 *SINAIS DETECTADOS*\n"
+                for i, signal in enumerate(signals[:3], 1):  # Máximo 3 sinais
+                    signal_type = signal.get('signal_type', 'hold').upper()
+                    confidence = signal.get('confidence', 0)
+                    reasoning = signal.get('reasoning', 'Não especificado')
+                    
+                    # Emoji baseado no tipo de sinal
+                    if signal_type == 'BUY':
+                        signal_emoji = "🟢"
+                    elif signal_type == 'SELL':
+                        signal_emoji = "🔴"
+                    else:
+                        signal_emoji = "⚪"
+                    
+                    # Barra de confiança visual
+                    confidence_bars = int(confidence * 10)
+                    confidence_visual = "🟩" * confidence_bars + "⬜" * (10 - confidence_bars)
+                    
+                    message += f"{signal_emoji} *Sinal {i}:* {signal_type} (confiança: {confidence:.2%})\n"
+                    message += f"   {confidence_visual}\n"
+                    message += f"   📝 *Razão:* {reasoning}\n\n"
+                    
+                if len(signals) > 3:
+                    message += f"   ... e mais {len(signals) - 3} sinais\n\n"
+            else:
+                message += "🔍 *NENHUM SINAL DETECTADO*\n"
+                message += "   Mercado em consolidação ou sem oportunidades claras\n\n"
+            
+            # Seção de análise tradicional vs IA
+            if traditional_result or ai_result:
+                message += "🤖 *COMPARAÇÃO DE ANÁLISES*\n"
+                
+                # Análise tradicional
+                if traditional_result:
+                    trad_action = traditional_result.get('action', 'hold')
+                    trad_should_trade = traditional_result.get('should_trade', False)
+                    trad_emoji = "✅" if trad_should_trade else "❌"
+                    message += f"{trad_emoji} *Tradicional:* {trad_action.upper() if trad_action else 'HOLD'}\n"
+                
+                # Análise de IA
+                if ai_result:
+                    ai_signals_count = len(ai_result.get('signals', []))
+                    ai_best_signal = ai_result.get('best_signal', {})
+                    ai_action = ai_best_signal.get('signal_type', 'hold')
+                    ai_confidence = ai_best_signal.get('confidence', 0)
+                    
+                    if ai_signals_count > 0:
+                        ai_emoji = "🤖"
+                        message += f"{ai_emoji} *IA:* {ai_action.upper()} (conf: {ai_confidence:.2%}) - {ai_signals_count} sinais\n"
+                    else:
+                        message += f"🤖 *IA:* Sem sinais válidos encontrados\n"
+                
+                # Concordância entre análises
+                if traditional_result and ai_result:
+                    trad_action = traditional_result.get('action', 'hold')
+                    ai_action = ai_result.get('best_signal', {}).get('signal_type', 'hold')
+                    
+                    if trad_action == ai_action and trad_action != 'hold':
+                        message += f"🎯 *Concordância:* Ambas sugerem {trad_action.upper()}\n"
+                    elif trad_action != ai_action:
+                        message += f"⚠️ *Divergência:* Tradicional({trad_action}) vs IA({ai_action})\n"
+                
+                message += "\n"
+            
+            # Seção de avaliação de risco
+            if risk_assessment:
+                risk_level = risk_assessment.get('overall_risk', 'medium')
+                risk_score = risk_assessment.get('risk_score', 0.5)
+                
+                # Emoji baseado no nível de risco
+                if risk_level == 'low':
+                    risk_emoji = "🟢"
+                elif risk_level == 'high':
+                    risk_emoji = "🔴"
+                else:
+                    risk_emoji = "🟡"
+                
+                # Barra de risco visual
+                risk_bars = int(risk_score * 10)
+                risk_visual = "🟥" * risk_bars + "⬜" * (10 - risk_bars)
+                
+                message += f"⚖️ *AVALIAÇÃO DE RISCO*\n"
+                message += f"{risk_emoji} *Nível:* {risk_level.upper()} (score: {risk_score:.2f})\n"
+                message += f"   {risk_visual}\n"
+                
+                # Recomendações de risco
+                recommendations = risk_assessment.get('recommendations', [])
+                if recommendations:
+                    message += f"📋 *Recomendações:* {', '.join(recommendations[:2])}\n"
+                
+                message += "\n"
+            
+            # Seção de sentimento do mercado
+            if market_sentiment:
+                sentiment_label = market_sentiment.get('sentiment_label', 'neutral')
+                sentiment_score = market_sentiment.get('sentiment_score', 0.0)
+                sentiment_confidence = market_sentiment.get('confidence', 0.0)
+                
+                # Emoji baseado no sentimento
+                if sentiment_label == 'bullish':
+                    sentiment_emoji = "🐂"
+                elif sentiment_label == 'bearish':
+                    sentiment_emoji = "🐻"
+                else:
+                    sentiment_emoji = "😐"
+                
+                message += f"🌐 *SENTIMENTO DO MERCADO*\n"
+                message += f"{sentiment_emoji} *Sentimento:* {sentiment_label.upper()} "
+                message += f"(score: {sentiment_score:+.2f}, conf: {sentiment_confidence:.1%})\n\n"
+            
+            # Seção de decisão final
+            if final_decision:
+                should_trade = final_decision.get('should_trade', False)
+                action = final_decision.get('action', 'hold')
+                reasoning = final_decision.get('reasoning', 'Análise não conclusiva')
+                
+                if should_trade and action != 'hold':
+                    decision_emoji = "🟢" if action == 'buy' else "🔴"
+                    message += f"🎯 *DECISÃO FINAL*\n"
+                    message += f"{decision_emoji} *Ação:* {action.upper()}\n"
+                    message += f"📝 *Justificativa:* {reasoning}\n"
+                else:
+                    message += f"⏸️ *DECISÃO FINAL: AGUARDAR*\n"
+                    message += f"📝 *Motivo:* {reasoning}\n"
+            
+            # Rodapé com informações técnicas
+            message += "\n" + "─" * 30 + "\n"
+            message += f"🔧 *Dados técnicos:* {symbol} | TF: {timeframe or '1h'} | Duração: {analysis_duration:.2f}s\n"
+            message += f"📊 *Sistema:* IA + Análise Tradicional"
+            
+            # Envia a mensagem
+            return self.send_message(message)
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao enviar report de análise: {str(e)}")
+            # Fallback para notificação simples
+            simple_message = f"📊 Análise de {symbol} concluída - {len(analysis_data.get('signals', []))} sinais encontrados"
+            return self.send_message(simple_message)
+        
     def notify_analysis(self, symbol, data_type, details, chart_data=None, timeframe=None):
         """
         Envia notificação sobre uma análise de mercado com detalhes formatados

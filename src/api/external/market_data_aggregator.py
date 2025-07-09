@@ -17,6 +17,8 @@ from src.api.external.coinmarketcal_client import CoinMarketCalAPIClient
 from src.api.external.cryptopanic_client import CryptoPanicAPIClient
 from src.api.external.news_api_client import NewsAPIClient
 from src.core.config import settings
+from src.models.market_analysis import MarketAnalysis
+from src.database.database import get_database
 
 logger = logging.getLogger(__name__)
 
@@ -502,7 +504,7 @@ class MarketDataAggregator:
                     )
                     
                     if sentiment:
-                        return SentimentAnalysis(
+                        sentiment_analysis = SentimentAnalysis(
                             currency=sentiment['currency'],
                             sentiment=sentiment['sentiment'],
                             sentiment_score=sentiment['sentiment_score'],
@@ -512,6 +514,15 @@ class MarketDataAggregator:
                             source=sentiment['source'],
                             analyzed_days=sentiment['analyzed_days']
                         )
+                        
+                        # Save to database
+                        await self._save_analysis_to_database(
+                            symbol=currency,
+                            analysis_type='sentiment_analysis',
+                            data=asdict(sentiment_analysis)
+                        )
+                        
+                        return sentiment_analysis
                 
                 except Exception as e:
                     logger.warning(f"CryptoPanic sentiment error: {e}")
@@ -542,7 +553,7 @@ class MarketDataAggregator:
                         elif avg_score < -0.2:
                             overall_sentiment = "negative"
                         
-                        return SentimentAnalysis(
+                        sentiment_analysis = SentimentAnalysis(
                             currency=currency,
                             sentiment=overall_sentiment,
                             sentiment_score=avg_score,
@@ -552,6 +563,15 @@ class MarketDataAggregator:
                             source="news_api",
                             analyzed_days=days
                         )
+                        
+                        # Save to database
+                        await self._save_analysis_to_database(
+                            symbol=currency,
+                            analysis_type='sentiment_analysis_fallback',
+                            data=asdict(sentiment_analysis)
+                        )
+                        
+                        return sentiment_analysis
                 
                 except Exception as e:
                     logger.warning(f"NewsAPI sentiment error: {e}")
@@ -627,6 +647,13 @@ class MarketDataAggregator:
             # Calculate summary metrics
             analysis["summary"] = self._calculate_summary_metrics(analysis)
             
+            # Save comprehensive analysis to database
+            await self._save_analysis_to_database(
+                symbol='MARKET_OVERVIEW',
+                analysis_type='comprehensive_market_analysis',
+                data=analysis
+            )
+            
             logger.info("Comprehensive market analysis completed")
             return analysis
             
@@ -694,6 +721,15 @@ class MarketDataAggregator:
         except Exception as e:
             logger.warning(f"Error calculating summary metrics: {e}")
             return {"error": "Failed to calculate summary metrics"}
+    
+    async def _save_analysis_to_database(self, symbol: str, analysis_type: str, data: Dict[str, Any]):
+        """Salva análise no banco de dados"""
+        try:
+            async for db in get_database():
+                await MarketAnalysis.save_analysis(db, symbol, analysis_type, data)
+                logger.info(f"Análise salva no banco: {symbol} - {analysis_type}")
+        except Exception as e:
+            logger.error(f"Erro ao salvar análise no banco: {e}")
 
 
 # Convenience functions for easy usage

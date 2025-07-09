@@ -19,6 +19,7 @@ from src.schemas.portfolio import (
 from src.schemas.user import User
 from src.services.portfolio_position_service import PortfolioPositionService
 from src.services.portfolio_service import PortfolioService
+from src.middleware.enhanced_rate_limiting import handle_rate_limited_request
 
 router = APIRouter()
 
@@ -463,21 +464,68 @@ async def get_portfolio_rebalancing_suggestions(
     }
 
 
-# ==================== Wallet Value Endpoints ====================
+# ==================== Portfolio Metrics Endpoint ====================
 
-@router.get("/wallet/total-value")
-async def get_wallet_total_value(
-    currencies: Optional[str] = Query("USD,BRL,EUR,BTC", description="Comma-separated list of currencies (USD,BRL,EUR,BTC,ETH)"),
+@router.get("/metrics")
+async def get_portfolio_metrics(
+    period: str = Query("month", description="Period for metrics (week, month, quarter, year)"),
     db: AsyncSession = Depends(get_database),
     current_user: User = Depends(get_current_active_user),
 ) -> Any:
     """
-    Get wallet total value in multiple currencies (USD, BRL, EUR, BTC, ETH).
+    Get comprehensive portfolio metrics including performance, risk, and allocation data.
     """
     portfolio_service = PortfolioService(db)
     
     # Get portfolio summary
     summary = await portfolio_service.get_portfolio_summary(current_user.id)
+    
+    # Get portfolio performance
+    performance = await portfolio_service.get_portfolio_performance(current_user.id, period)
+    
+    # Get asset distribution
+    distribution = await portfolio_service.get_assets_distribution(current_user.id)
+    
+    # Get risk assessment
+    risk_assessment = await portfolio_service.get_portfolio_risk_assessment(current_user.id)
+    
+    return {
+        "status": "success",
+        "data": {
+            "summary": summary.get("data", {}),
+            "performance": performance.get("data", {}),
+            "distribution": distribution.get("data", {}),
+            "risk_assessment": risk_assessment.get("data", {}),
+            "period": period,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    }
+
+
+# ==================== Wallet Value Endpoints ====================
+
+@router.get("/wallet/total-value")
+async def get_wallet_total_value(
+    currencies: Optional[str] = Query("USD,BRL,EUR,BTC", description="Comma-separated list of currencies (USD,BRL,EUR,BTC,ETH)"),
+    force_refresh: bool = Query(False, description="Force refresh cache"),
+    db: AsyncSession = Depends(get_database),
+    current_user: User = Depends(get_current_active_user),
+) -> Any:
+    """
+    Get wallet total value in multiple currencies (USD, BRL, EUR, BTC, ETH).
+    Uses caching to reduce API calls and includes retry logic for rate limiting.
+    """
+    async def get_portfolio_data():
+        portfolio_service = PortfolioService(db)
+        return await portfolio_service.get_portfolio_summary(current_user.id)
+    
+    # Use retry logic to handle rate limits
+    summary = await handle_rate_limited_request(
+        get_portfolio_data,
+        max_retries=3,
+        base_delay=2.0,
+        max_delay=30.0
+    )
     
     if summary["status"] != "success":
         return {

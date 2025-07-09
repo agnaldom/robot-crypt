@@ -16,6 +16,19 @@ class MarketAnalysis(Base):
     data = Column(JSON, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=True)
     
+    @classmethod
+    async def save_analysis(cls, session, symbol, analysis_type, data):
+        """Salva análise no banco de dados"""
+        try:
+            new_analysis = cls.create(symbol, analysis_type, data)
+            session.add(new_analysis)
+            # Não fazemos commit aqui - deixamos para o context manager
+            # await session.commit()
+            return new_analysis
+        except Exception as e:
+            await session.rollback()
+            raise
+
     def __repr__(self):
         return f"<MarketAnalysis {self.symbol} {self.analysis_type} at {self.created_at}>"
     

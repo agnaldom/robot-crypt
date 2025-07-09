@@ -10,6 +10,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict, Counter
 
+logger = logging.getLogger(__name__)
+
 # Try to import VADER sentiment analyzer
 try:
     from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -17,8 +19,6 @@ try:
 except ImportError:
     VADER_AVAILABLE = False
     logger.warning("VADER sentiment analyzer not available. Install with: pip install vaderSentiment")
-
-logger = logging.getLogger(__name__)
 
 
 class NewsAnalyzer:

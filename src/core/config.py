@@ -211,6 +211,14 @@ class Settings(BaseSettings):
         default=60,
         description="Limite de requisições por minuto"
     )
+    REDIS_URL: Optional[str] = Field(
+        default=None,
+        description="URL de conexão com Redis para rate limiting distribuído"
+    )
+    WHITELISTED_IPS: str = Field(
+        default="127.0.0.1,localhost,::1,0.0.0.0",
+        description="IPs com rate limiting mais leniente (separados por vírgula)"
+    )
     
     # === CONFIGURAÇÕES DE LOGGING ===
     LOG_LEVEL: str = Field(
@@ -295,6 +303,20 @@ class Settings(BaseSettings):
     def notifications_enabled(self) -> bool:
         """Verifica se as notificações estão habilitadas."""
         return bool(self.TELEGRAM_BOT_TOKEN and self.TELEGRAM_CHAT_ID)
+    
+    @property
+    def whitelisted_ips_list(self) -> List[str]:
+        """Converte WHITELISTED_IPS em lista de strings."""
+        if not self.WHITELISTED_IPS:
+            return ["127.0.0.1", "localhost", "::1", "0.0.0.0"]
+        
+        # Parse como CSV (comma-separated values)
+        ips = [ip.strip() for ip in self.WHITELISTED_IPS.split(",") if ip.strip()]
+        if ips:
+            return ips
+        else:
+            # Se não conseguir parsear, retorna lista padrão
+            return ["127.0.0.1", "localhost", "::1", "0.0.0.0"]
     
     def get_binance_config(self) -> Dict[str, Any]:
         """Retorna configuração da Binance."""
@@ -426,14 +448,17 @@ class Config:
             "trade_amount": float(trade_amount) if trade_amount else 100.0  # Valor padrão: R$100
         }
         
-        # Estratégia de Swing Trading (Fase 3)
+        # Estratégia de Swing Trading (Fase 3) - Atualizada para altcoins voláteis
         self.swing_trading = {
-            "min_volume_increase": 0.3,  # 30% acima da média diária
-            "profit_target": float(take_profit_percentage) / 100 if take_profit_percentage else 0.08,  # Padrão: 8%
+            "min_volume_increase": 0.50,  # 50% acima da média diária para altcoins voláteis
+            "profit_target": float(take_profit_percentage) / 100 if take_profit_percentage else 0.15,  # 15% para altcoins de alta volatilidade
             "stop_loss": float(stop_loss_percentage) / 100 if stop_loss_percentage else 0.03,          # Padrão: 3%
             "max_hold_time": float(max_hold_time) / 3600 if max_hold_time else 48,  # Converter segundos para horas
             "max_position_size": 0.05,    # Máximo 5% do capital por posição
-            "entry_delay": 60  # Delay entre análise e execução (segundos)
+            "entry_delay": 60,  # Delay entre análise e execução (segundos)
+            "volatility_threshold": 0.3,  # Threshold para identificar altcoins voláteis
+            "use_ai_timing": True,  # Usar análise IA para timing
+            "ai_confidence_min": 0.6  # Confiança mínima da IA para executar trades
         }
         
         # Carrega configuração de arquivo se fornecido

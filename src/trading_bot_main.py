@@ -1004,6 +1004,7 @@ def main():
                             memory_percent = health_metrics.get('memory_percent')
                             if memory_percent is not None and memory_percent > 80:
                                 logger.warning(f"Uso de memória elevado: {memory_percent}% - Coletando lixo")
+                                import gc
                                 gc.collect()
                     
                     # Prepara o estado para ser salvo

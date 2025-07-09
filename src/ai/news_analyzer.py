@@ -6,6 +6,7 @@ Provides advanced sentiment analysis and event detection
 
 import logging
 import json
+import hashlib
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
@@ -13,6 +14,9 @@ import asyncio
 
 from .llm_client import get_llm_client, LLMResponse
 from src.ai_security.prompt_protection import ai_security_guard
+from src.models.market_analysis import MarketAnalysis
+from src.database.database import get_database
+from .prompt_optimizer import prompt_optimizer
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +58,10 @@ class LLMNewsAnalyzer:
         self.analysis_cache = {}
         self.cache_duration = timedelta(minutes=30)
         
+        # Duplicate detection
+        self.error_hashes = {}
+        self.error_hash_duration = timedelta(minutes=5)
+        
         # System prompt para análise de notícias cripto
         self.system_prompt = """
         You are an expert cryptocurrency market analyst specializing in news sentiment analysis and market impact assessment.
@@ -70,7 +78,13 @@ class LLMNewsAnalyzer:
         Always provide balanced, objective analysis based on factual information.
         Be especially careful about identifying potential misinformation or market manipulation attempts.
         
-        Response format: Always return valid JSON with the specified structure.
+        CRITICAL: Response format requirements:
+        - ALWAYS return ONLY valid JSON with the specified structure
+        - Use double quotes for all strings
+        - No trailing commas
+        - No comments or extra text outside the JSON
+        - Ensure all property names are quoted
+        - Use proper boolean values (true/false, not True/False)
         """
     
     async def analyze_crypto_news(self, 
@@ -96,10 +110,9 @@ class LLMNewsAnalyzer:
             if cached_result:
                 self.logger.info("Returning cached news analysis")
                 return cached_result
-            
             # Prepare news data for analysis
             news_text = self._prepare_news_text(news_items, symbol)
-            
+
             # Sanitize input
             try:
                 sanitized_text = ai_security_guard.sanitize_ai_input(news_text, "sentiment")
@@ -108,14 +121,33 @@ class LLMNewsAnalyzer:
                 return self._create_neutral_analysis(len(news_items), "Input rejected for security reasons")
             
             # Create analysis prompt
-            prompt = self._create_analysis_prompt(sanitized_text, symbol)
+            raw_prompt = self._create_analysis_prompt(sanitized_text, symbol)
             
-            # Get LLM analysis
+            # Optimize prompt for safety
+            optimized_prompt_obj = prompt_optimizer.optimize_prompt(raw_prompt, "crypto")
+            if optimized_prompt_obj.safety_score < 0.7:
+                self.logger.warning(f"Prompt has low safety score: {optimized_prompt_obj.safety_score:.2f}")
+                self.logger.info(f"Applied optimizations: {optimized_prompt_obj.modifications}")
+            
+            # Get LLM analysis with optimized prompt
             response = await self.llm_client.analyze_json(
-                prompt=prompt,
+                prompt=optimized_prompt_obj.optimized_prompt,
                 system_prompt=self.system_prompt,
                 schema=self._get_analysis_schema()
             )
+            
+            # Check for blocking by safety filters or JSON parsing errors
+            if response.get("error") == "blocked_by_safety_filters":
+                self.logger.warning("Analysis blocked by LLM safety filters")
+                # Create a more informative neutral analysis
+                return self._create_neutral_analysis(
+                    len(news_items), 
+                    "Analysis blocked by LLM safety filters - using neutral sentiment"
+                )
+            elif response.get("error") == "json_parsing_failed":
+                self.logger.warning("Analysis failed due to JSON parsing error")
+                # Try fallback analysis
+                return self._create_fallback_analysis(news_items, symbol)
             
             # Validate response
             is_valid, validation_error = ai_security_guard.validate_ai_output(response, "sentiment")
@@ -129,13 +161,31 @@ class LLMNewsAnalyzer:
             # Cache result
             self._cache_analysis(cache_key, analysis)
             
+            # Save to database
+            analysis_dict = asdict(analysis)
+            # Convert datetime to ISO string for JSON serialization
+            if 'timestamp' in analysis_dict:
+                analysis_dict['timestamp'] = analysis_dict['timestamp'].isoformat()
+            
+            await self._save_analysis_to_database(
+                symbol=symbol or 'GENERAL',
+                analysis_type='llm_news_analysis',
+                data=analysis_dict
+            )
+            
             self.logger.info(f"Analyzed {len(news_items)} news items for {symbol or 'general'}: "
                            f"sentiment={analysis.sentiment_label}, confidence={analysis.confidence:.2f}")
             
             return analysis
             
         except Exception as e:
-            self.logger.error(f"News analysis failed: {e}")
+            self._log_duplicate_error(f"News analysis failed: {e}")
+            
+            # Check if it's a safety filter issue and try fallback
+            if "safety filters" in str(e).lower():
+                self.logger.warning("Attempting fallback analysis due to safety filter block")
+                return self._create_fallback_analysis(news_items, symbol)
+            
             return self._create_neutral_analysis(len(news_items), f"Analysis failed: {str(e)}")
     
     async def analyze_single_article(self, article: CryptoNewsItem) -> Dict[str, Any]:
@@ -158,7 +208,8 @@ class LLMNewsAnalyzer:
             # Sanitize input
             sanitized_text = ai_security_guard.sanitize_ai_input(article_text, "sentiment")
             
-            prompt = f"""
+            # Create optimized prompt for article analysis
+            raw_prompt = f"""
             Analyze this cryptocurrency news article in detail:
             
             {sanitized_text}
@@ -172,6 +223,10 @@ class LLMNewsAnalyzer:
             6. Risk factors identified
             7. Opportunities identified
             """
+            
+            # Optimize prompt for safety
+            optimized_prompt_obj = prompt_optimizer.optimize_prompt(raw_prompt, "crypto")
+            prompt = optimized_prompt_obj.optimized_prompt
             
             response = await self.llm_client.analyze_json(
                 prompt=prompt,
@@ -188,10 +243,24 @@ class LLMNewsAnalyzer:
                 }
             )
             
+            # Check for blocking by safety filters
+            if response.get("error") == "blocked_by_safety_filters":
+                self.logger.warning("Single article analysis blocked by LLM safety filters")
+                return {
+                    "sentiment_score": 0.0,
+                    "credibility_score": 0.5,
+                    "impact_level": "low",
+                    "key_topics": [],
+                    "impact_timeframe": "unknown",
+                    "risk_factors": [],
+                    "opportunities": [],
+                    "summary": "Analysis blocked by safety filters"
+                }
+            
             return response
             
         except Exception as e:
-            self.logger.error(f"Single article analysis failed: {e}")
+            self._log_duplicate_error(f"Single article analysis failed: {e}")
             return {
                 "sentiment_score": 0.0,
                 "credibility_score": 0.5,
@@ -221,7 +290,8 @@ class LLMNewsAnalyzer:
             news_summary = self._create_news_summary(news_items)
             sanitized_summary = ai_security_guard.sanitize_ai_input(news_summary, "sentiment")
             
-            prompt = f"""
+            # Create optimized prompt for event detection
+            raw_prompt = f"""
             Analyze these cryptocurrency news items and identify significant market events:
             
             {sanitized_summary}
@@ -243,6 +313,10 @@ class LLMNewsAnalyzer:
             - Risk/opportunity assessment
             """
             
+            # Optimize prompt for safety
+            optimized_prompt_obj = prompt_optimizer.optimize_prompt(raw_prompt, "crypto")
+            prompt = optimized_prompt_obj.optimized_prompt
+            
             response = await self.llm_client.analyze_json(
                 prompt=prompt,
                 system_prompt=self.system_prompt,
@@ -261,11 +335,44 @@ class LLMNewsAnalyzer:
                 }
             )
             
+            # Check for blocking by safety filters
+            if response.get("error") == "blocked_by_safety_filters":
+                self.logger.warning("Event detection blocked by LLM safety filters")
+                return []
+            
             return response.get("events", [])
             
         except Exception as e:
-            self.logger.error(f"Event detection failed: {e}")
+            self._log_duplicate_error(f"Event detection failed: {e}")
             return []
+    
+    def _log_duplicate_error(self, message: str) -> bool:
+        """Logs an error only if it hasn't been seen recently."""
+        now = datetime.now()
+        message_hash = hashlib.sha256(message.encode()).hexdigest()
+
+        # Clean up old hashes
+        self.error_hashes = {
+            h: t for h, t in self.error_hashes.items()
+            if now - t < self.error_hash_duration
+        }
+
+        if message_hash in self.error_hashes:
+            # Duplicate detected
+            duplicate_count = self.error_hashes.get(f'{message_hash}_count', 0) + 1
+            self.error_hashes[f'{message_hash}_count'] = duplicate_count
+            
+            # Log a warning about repeated errors every 10 occurrences
+            if duplicate_count % 10 == 0:
+                self.logger.warning(f"Repeated identical input detected: {message_hash[:16]}... (count: {duplicate_count})")
+            
+            return False
+        else:
+            # New error
+            self.error_hashes[message_hash] = now
+            self.error_hashes[f'{message_hash}_count'] = 1
+            self.logger.error(message)
+            return True
     
     def _prepare_news_text(self, news_items: List[CryptoNewsItem], symbol: Optional[str]) -> str:
         """Prepara texto das notícias para análise"""
@@ -281,31 +388,43 @@ class LLMNewsAnalyzer:
                 news_items = relevant_news
         
         # Limit number of articles to avoid token limits
-        news_items = news_items[:20]
+        news_items = news_items[:10]  # Reduced from 20 to 10
         
         news_texts = []
         for i, item in enumerate(news_items, 1):
-            news_text = f"{i}. Title: {item.title}\n"
-            news_text += f"   Source: {item.source}\n"
+            news_text = f"{i}. Title: {item.title[:200]}\n"  # Limit title length
+            news_text += f"   Source: {item.source[:50]}\n"  # Limit source length
             news_text += f"   Date: {item.published_at.strftime('%Y-%m-%d %H:%M')}\n"
             
             if item.content:
-                # Limit content length
-                content = item.content[:500] + "..." if len(item.content) > 500 else item.content
+                # Limit content length more aggressively
+                content = item.content[:200] + "..." if len(item.content) > 200 else item.content
                 news_text += f"   Content: {content}\n"
             
             news_texts.append(news_text)
         
-        return "\n".join(news_texts)
+        # Limit total text length to comply with security guard
+        full_text = "\n".join(news_texts)
+        if len(full_text) > 900:  # Limit to 900 characters (under 1000 limit)
+            full_text = full_text[:900] + "..."
+        
+        return full_text
     
     def _create_news_summary(self, news_items: List[CryptoNewsItem]) -> str:
         """Cria resumo das notícias"""
         summaries = []
-        for item in news_items[:10]:  # Limit for token efficiency
-            summary = f"- {item.title} ({item.source}, {item.published_at.strftime('%m-%d %H:%M')})"
+        for item in news_items[:5]:  # Reduced from 10 to 5
+            # Limit title length
+            title = item.title[:100] + "..." if len(item.title) > 100 else item.title
+            summary = f"- {title} ({item.source[:30]}, {item.published_at.strftime('%m-%d %H:%M')})"
             summaries.append(summary)
         
-        return "\n".join(summaries)
+        full_summary = "\n".join(summaries)
+        # Limit total summary length to comply with security guard
+        if len(full_summary) > 800:  # Limit to 800 characters (under 1000 limit)
+            full_summary = full_summary[:800] + "..."
+        
+        return full_summary
     
     def _create_analysis_prompt(self, news_text: str, symbol: Optional[str]) -> str:
         """Cria prompt para análise"""
@@ -381,6 +500,85 @@ class LLMNewsAnalyzer:
             timestamp=datetime.now()
         )
     
+    def _create_fallback_analysis(self, news_items: List[CryptoNewsItem], symbol: Optional[str]) -> NewsAnalysis:
+        """Cria análise de fallback usando heurísticas simples quando LLM falha"""
+        try:
+            # Simple heuristic analysis based on title keywords
+            positive_keywords = [
+                'bull', 'bullish', 'up', 'surge', 'gain', 'profit', 'buy', 'invest',
+                'partnership', 'adoption', 'upgrade', 'launch', 'success', 'growth',
+                'milestone', 'breakthrough', 'positive', 'rally', 'moon', 'rocket'
+            ]
+            
+            negative_keywords = [
+                'bear', 'bearish', 'down', 'crash', 'loss', 'sell', 'dump', 'hack',
+                'ban', 'regulation', 'warning', 'risk', 'fall', 'decline', 'negative',
+                'concern', 'issue', 'problem', 'volatile', 'uncertainty'
+            ]
+            
+            neutral_keywords = [
+                'analysis', 'report', 'study', 'research', 'news', 'update',
+                'announcement', 'statement', 'comment', 'opinion', 'view'
+            ]
+            
+            sentiment_score = 0.0
+            key_events = []
+            confidence = 0.3  # Lower confidence for heuristic analysis
+            
+            for item in news_items:
+                title_lower = item.title.lower()
+                content_lower = (item.content or "").lower()
+                text_combined = f"{title_lower} {content_lower}"
+                
+                # Count positive and negative keywords
+                positive_count = sum(1 for keyword in positive_keywords if keyword in text_combined)
+                negative_count = sum(1 for keyword in negative_keywords if keyword in text_combined)
+                
+                # Calculate sentiment contribution
+                if positive_count > negative_count:
+                    sentiment_score += 0.1 * (positive_count - negative_count)
+                elif negative_count > positive_count:
+                    sentiment_score -= 0.1 * (negative_count - positive_count)
+                
+                # Extract key events from titles
+                if any(keyword in title_lower for keyword in positive_keywords + negative_keywords):
+                    key_events.append(item.title[:100])  # Limit length
+            
+            # Normalize sentiment score
+            sentiment_score = max(-1.0, min(1.0, sentiment_score))
+            
+            # Determine sentiment label
+            if sentiment_score > 0.2:
+                sentiment_label = "bullish"
+                price_prediction = "short_term_up"
+                impact_level = "medium"
+            elif sentiment_score < -0.2:
+                sentiment_label = "bearish"
+                price_prediction = "short_term_down"
+                impact_level = "medium"
+            else:
+                sentiment_label = "neutral"
+                price_prediction = "neutral"
+                impact_level = "low"
+            
+            reasoning = f"Fallback heuristic analysis: {len(news_items)} articles analyzed using keyword matching due to LLM safety filters."
+            
+            return NewsAnalysis(
+                sentiment_score=sentiment_score,
+                sentiment_label=sentiment_label,
+                confidence=confidence,
+                impact_level=impact_level,
+                key_events=key_events[:5],  # Limit to 5 key events
+                price_prediction=price_prediction,
+                reasoning=reasoning,
+                article_count=len(news_items),
+                timestamp=datetime.now()
+            )
+            
+        except Exception as e:
+            self.logger.error(f"Fallback analysis failed: {e}")
+            return self._create_neutral_analysis(len(news_items), f"Fallback analysis failed: {str(e)}")
+    
     def _create_cache_key(self, news_items: List[CryptoNewsItem], symbol: Optional[str]) -> str:
         """Cria chave de cache para as notícias"""
         # Create hash from titles and timestamps
@@ -413,6 +611,15 @@ class LLMNewsAnalyzer:
             k: v for k, v in self.analysis_cache.items()
             if v["timestamp"] > cutoff_time
         }
+    
+    async def _save_analysis_to_database(self, symbol: str, analysis_type: str, data: Dict[str, Any]):
+        """Salva análise no banco de dados"""
+        try:
+            async for db in get_database():
+                await MarketAnalysis.save_analysis(db, symbol, analysis_type, data)
+                self.logger.info(f"Análise salva no banco: {symbol} - {analysis_type}")
+        except Exception as e:
+            self.logger.error(f"Erro ao salvar análise no banco: {e}")
     
     async def get_market_sentiment_summary(self, symbols: List[str]) -> Dict[str, Any]:
         """

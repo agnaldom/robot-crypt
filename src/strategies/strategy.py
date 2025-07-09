@@ -454,12 +454,12 @@ class SwingTradingStrategy(TradingStrategy):
         except Exception as e:
             self.logger.error(f"Erro ao atualizar lista de altcoins: {str(e)}")
     
-    def check_volume_increase(self, symbol, threshold=0.30, notifier=None):
-        """Verifica se o volume da moeda aumentou acima do threshold (30% por padrão)
+    def check_volume_increase(self, symbol, threshold=0.50, notifier=None):
+        """Verifica se o volume da moeda aumentou acima do threshold (50% por padrão para altcoins voláteis)
         
         Args:
             symbol (str): Par de trading para verificar
-            threshold (float): Percentual mínimo de aumento (0.30 = 30%)
+            threshold (float): Percentual mínimo de aumento (0.50 = 50% para altcoins voláteis)
             notifier (TelegramNotifier, optional): Notificador Telegram para enviar alertas
         
         Returns:
@@ -537,8 +537,8 @@ class SwingTradingStrategy(TradingStrategy):
     def analyze_volume(self, symbol, period="1d", lookback=10, notifier=None):
         """Analisa volume de negociação para identificar aumento 
         
-        Procura por moedas com aumento de volume >30% em relação à média,
-        indicando possível movimento de preço significativo
+        Procura por moedas com aumento de volume >50% em relação à média,
+        indicando possível movimento de preço significativo em altcoins voláteis
         
         Args:
             symbol (str): O par de moedas para análise
@@ -700,9 +700,10 @@ class SwingTradingStrategy(TradingStrategy):
         """Analisa o mercado usando estratégia de swing trading
         
         Critérios de entrada:
-        - Volume >30% acima da média diária
+        - Volume >50% acima da média diária (altcoins voláteis)
         - Preço abaixo de R$1.00
         - Nova listagem (opcional)
+        - Análise IA para timing otimizado
         
         Args:
             symbol (str): O par de moedas para análise
@@ -768,7 +769,7 @@ class SwingTradingStrategy(TradingStrategy):
             if not volume_data:
                 return False, None, None
                 
-            # Critério 1: Volume aumentou significativamente (>30%)
+            # Critério 1: Volume aumentou significativamente (>50% para altcoins voláteis)
             volume_increase = volume_data['volume_increase']
             has_volume_increase = volume_increase >= self.config.swing_trading['min_volume_increase']
             
@@ -777,7 +778,7 @@ class SwingTradingStrategy(TradingStrategy):
             
             # Log para análise
             if has_volume_increase:
-                self.logger.info(f"{symbol} - Volume aumentou {volume_increase:.2%} (>30% necessário)")
+                self.logger.info(f"{symbol} - Volume aumentou {volume_increase:.2%} (>{self.config.swing_trading['min_volume_increase']:.0%} necessário para altcoins voláteis)")
             
             if is_new_listing:
                 self.logger.info(f"{symbol} - Nova listagem detectada!")

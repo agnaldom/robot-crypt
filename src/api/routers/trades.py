@@ -22,6 +22,7 @@ router = APIRouter()
 
 
 @router.get("/", response_model=List[Trade])
+@router.get("", response_model=List[Trade])
 async def read_trades(
     skip: int = 0,
     limit: int = 100,

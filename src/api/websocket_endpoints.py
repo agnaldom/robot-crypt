@@ -28,6 +28,91 @@ router = APIRouter()
 security = HTTPBearer()
 
 
+@router.websocket("/trading")
+async def websocket_trading_endpoint(
+    websocket: WebSocket,
+    token: str = None,
+    db: AsyncSession = Depends(get_database)
+):
+    """
+    Trading WebSocket endpoint for real-time trading communication.
+    
+    Args:
+        websocket: WebSocket connection
+        token: Optional authentication token
+        db: Database session
+    """
+    connection_id = None
+    user_id = None
+    
+    try:
+        # Authenticate user if token is provided
+        if token:
+            try:
+                user = await get_current_user_websocket(token, db)
+                if not user:
+                    await websocket.close(code=1008, reason="Authentication failed")
+                    return
+                user_id = user.id
+            except Exception as e:
+                logger.error(f"Authentication error: {e}")
+                await websocket.close(code=1008, reason="Authentication failed")
+                return
+        else:
+            # For development/testing - allow anonymous connections
+            await websocket.close(code=1008, reason="Authentication required")
+            return
+        
+        # Connect to WebSocket manager
+        connection_id = await websocket_manager.connect(websocket, user_id)
+        if not connection_id:
+            return
+        
+        logger.info(f"WebSocket connection established for user {user_id}")
+        
+        # Handle incoming messages
+        while True:
+            try:
+                # Receive message from client
+                data = await websocket.receive_text()
+                message_data = json.loads(data)
+                
+                # Process the message
+                await handle_client_message(connection_id, user_id, message_data, db)
+                
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket disconnected for user {user_id}")
+                break
+            except json.JSONDecodeError:
+                # Send error message for invalid JSON
+                await websocket_manager._send_to_connection(
+                    connection_id,
+                    WebSocketMessage(
+                        type=MessageType.ERROR,
+                        data={"error": "Invalid JSON format"},
+                        user_id=user_id
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error processing WebSocket message: {e}")
+                await websocket_manager._send_to_connection(
+                    connection_id,
+                    WebSocketMessage(
+                        type=MessageType.ERROR,
+                        data={"error": "Internal server error"},
+                        user_id=user_id
+                    )
+                )
+    
+    except Exception as e:
+        logger.error(f"WebSocket connection error: {e}")
+    
+    finally:
+        # Clean up connection
+        if connection_id:
+            await websocket_manager.disconnect(connection_id)
+
+
 @router.websocket("/ws/{user_id}")
 async def websocket_endpoint(
     websocket: WebSocket,

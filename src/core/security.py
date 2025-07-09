@@ -129,6 +129,8 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme)
 ) -> User:
     """Get the current authenticated user with enhanced validation."""
+    logger = logging.getLogger(__name__)
+    
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -143,8 +145,11 @@ async def get_current_user(
             raise credentials_exception
         token_data = TokenData(user_id=int(user_id))
     except (JWTError, ValueError) as e:
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Authentication failed: {str(e)}")
+        if settings.DEBUG:
+            logger.debug(f"Authentication failed: {str(e)}")
+            logger.debug(f"Token: {token[:20]}...")
+        else:
+            logger.warning(f"Authentication failed: {str(e)}")
         raise credentials_exception
     
     user_service = UserService(db)

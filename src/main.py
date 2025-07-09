@@ -15,16 +15,24 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 # Security middlewares
 from src.middleware.security_headers import (
-    SecurityHeadersMiddleware, 
-    RateLimitMiddleware, 
+    SecurityHeadersMiddleware,
     SecurityMonitoringMiddleware
 )
+from src.middleware.enhanced_rate_limiting import AdvancedRateLimitMiddleware
 
 from src.core.config import settings
+from src.core.dev_config import DevConfig, setup_dev_environment
 from src.database.database import Base, get_database
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging with enhanced configuration
+logging.basicConfig(
+    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('robot-crypt.log') if not settings.DEBUG else logging.NullHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Security
@@ -46,6 +54,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Error creating database tables: {e}")
+    
+    # Setup development environment
+    setup_dev_environment()
+    DevConfig.log_startup_config()
     
     # Initialize system (create superadmin, etc.)
     try:
@@ -75,9 +87,17 @@ app = FastAPI(
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(SecurityMonitoringMiddleware)
 
-# Only apply rate limiting in production
+# Apply enhanced rate limiting (disabled in debug mode for easier development)
 if not settings.DEBUG:
-    app.add_middleware(RateLimitMiddleware, calls=settings.RATE_LIMIT_PER_MINUTE, period=60)
+    app.add_middleware(
+        AdvancedRateLimitMiddleware, 
+        redis_url=getattr(settings, 'REDIS_URL', None), 
+        use_redis=False,
+        whitelisted_ips=getattr(settings, 'whitelisted_ips_list', [])
+    )
+    logger.info("Rate limiting enabled for production")
+else:
+    logger.info("Rate limiting disabled in debug mode")
 
 # Add trusted host middleware
 if not settings.DEBUG:
@@ -87,21 +107,13 @@ if not settings.DEBUG:
     )
 
 # Add CORS middleware with secure configuration
-if settings.DEBUG:
-    allowed_origins = ["*"]  # Apenas em desenvolvimento
-    allowed_methods = ["*"]
-    allowed_headers = ["*"]
-else:
-    allowed_origins = settings.ALLOWED_ORIGINS
-    allowed_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
-    allowed_headers = ["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"]
-
+cors_config = DevConfig.get_cors_config()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=allowed_methods,
-    allow_headers=allowed_headers,
+    allow_origins=cors_config["allow_origins"],
+    allow_credentials=cors_config["allow_credentials"],
+    allow_methods=cors_config["allow_methods"],
+    allow_headers=cors_config["allow_headers"],
     max_age=600  # Cache preflight por 10 minutos
 )
 

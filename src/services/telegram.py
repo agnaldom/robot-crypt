@@ -273,6 +273,36 @@ class TelegramService:
             self.logger.error(f"Error sending analysis report: {e}")
             return False
     
+    async def send_detailed_analysis_report(self, symbol: str, analysis_data: Dict[str, Any], 
+                                          timeframe: str = None) -> bool:
+        """
+        Send a detailed analysis report with structured information
+        
+        Args:
+            symbol (str): Trading pair
+            analysis_data (dict): Complete analysis data including:
+                - signals: List of found signals
+                - analysis_duration: Analysis execution time
+                - traditional_analysis: Traditional analysis result
+                - ai_analysis: AI analysis result
+                - risk_assessment: Risk evaluation
+                - market_sentiment: Market sentiment
+                - final_decision: Final trading decision
+            timeframe (str): Analysis timeframe (optional)
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        if not self.is_available():
+            self.logger.warning("Telegram service not available")
+            return False
+        
+        try:
+            return self.notifier.notify_analysis_report(symbol, analysis_data, timeframe)
+        except Exception as e:
+            self.logger.error(f"Error sending detailed analysis report: {e}")
+            return False
+    
     async def send_system_status(self, status_message: str, details: Dict[str, Any] = None,
                                status_type: str = "info") -> bool:
         """

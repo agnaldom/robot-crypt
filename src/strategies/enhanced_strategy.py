@@ -4,6 +4,7 @@ Estratégias de trading aprimoradas com integração do Sistema de Análise Inte
 """
 import time
 import logging
+import asyncio
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
@@ -181,16 +182,111 @@ class EnhancedTradingStrategy(TradingStrategy):
             if not clean_symbol:
                 clean_symbol = symbol[:3]  # Fallback
             
-            sentiment = await self.news_integrator.get_symbol_sentiment(clean_symbol)
+            # Usar timeout para evitar conexões longas
+            sentiment = await asyncio.wait_for(
+                self.news_integrator.get_symbol_sentiment(clean_symbol),
+                timeout=10.0  # 10 segundos timeout
+            )
+            
             self.logger.info(f"Sentimento de mercado para {symbol}: {sentiment['sentiment_label']} "
                            f"(score: {sentiment['sentiment_score']:.2f}, confiaça: {sentiment['confidence']:.2f})")
             return sentiment
             
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Timeout ao obter sentimento para {symbol}")
+            return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1, 'reasoning': 'Timeout'}
         except Exception as e:
             self.logger.error(f"Erro ao obter sentimento para {symbol}: {str(e)}")
-            return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1}
+            return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1, 'reasoning': f'Error: {str(e)}'}
     
-    def adjust_position_size_for_risk(self, base_position_size: float, 
+    def get_market_sentiment_sync(self, symbol: str) -> Dict[str, Any]:
+        """
+        Versão síncrona para obter sentimento do mercado quando não estamos em um contexto async
+        
+        Args:
+            symbol: Símbolo para análise
+            
+        Returns:
+            Contexto de sentimento do mercado
+        """
+        if not self.ai_enabled or not self.news_integrator:
+            return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1}
+        
+        try:
+            # Remove suffix if present (e.g., "BTCUSDT" -> "BTC")
+            clean_symbol = symbol.replace('USDT', '').replace('BUSD', '').replace('BTC', '').replace('ETH', '')
+            if not clean_symbol:
+                clean_symbol = symbol[:3]  # Fallback
+            
+            # Tenta executar a análise assíncrona de forma segura
+            try:
+                import asyncio
+                
+                # Verifica se já há um loop em execução
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Se há um loop em execução, usa versão simplificada
+                    self.logger.info(f"Loop existente detectado, usando sentimento simplificado para {symbol}")
+                    return self._get_fallback_sentiment(symbol, clean_symbol)
+                except RuntimeError:
+                    # Não há loop em execução, pode criar um novo
+                    pass
+                
+                # Cria novo loop para executar análise assíncrona
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                try:
+                    sentiment = loop.run_until_complete(
+                        asyncio.wait_for(
+                            self.news_integrator.get_symbol_sentiment(clean_symbol),
+                            timeout=8.0
+                        )
+                    )
+                    self.logger.info(f"Sentimento de mercado obtido para {symbol}: {sentiment['sentiment_label']}")
+                    return sentiment
+                    
+                except asyncio.TimeoutError:
+                    self.logger.warning(f"Timeout na análise de sentimento para {symbol}")
+                    return self._get_fallback_sentiment(symbol, clean_symbol)
+                    
+                finally:
+                    loop.close()
+                    
+            except Exception as async_error:
+                self.logger.warning(f"Erro na análise assíncrona para {symbol}: {str(async_error)}")
+                return self._get_fallback_sentiment(symbol, clean_symbol)
+            
+        except Exception as e:
+            self.logger.error(f"Erro ao obter sentimento para {symbol}: {str(e)}")
+            return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1, 'reasoning': f'Error: {str(e)}'}
+    
+    def _get_fallback_sentiment(self, symbol: str, clean_symbol: str) -> Dict[str, Any]:
+        """
+        Retorna sentimento de fallback baseado no símbolo
+        
+        Args:
+            symbol: Símbolo original
+            clean_symbol: Símbolo limpo
+            
+        Returns:
+            Sentimento de fallback
+        """
+        # Criar um sentimento básico baseado no símbolo
+        sentiment_map = {
+            'BTC': {'sentiment_score': 0.1, 'sentiment_label': 'slightly_positive', 'confidence': 0.3},
+            'ETH': {'sentiment_score': 0.05, 'sentiment_label': 'neutral', 'confidence': 0.3},
+            'BNB': {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.2}
+        }
+        
+        base_sentiment = sentiment_map.get(clean_symbol, 
+            {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1})
+        
+        base_sentiment['reasoning'] = f'Fallback sentiment for {symbol} (sync mode)'
+        
+        return base_sentiment
+    
+    def adjust_position_size_for_risk(self, base_position_size: float,
                                     risk_assessment: Dict[str, Any]) -> float:
         """
         Ajusta tamanho da posição baseado na avaliação de risco IA
@@ -272,6 +368,8 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
         Returns:
             Tuple: (should_trade, action, price)
         """
+        analysis_start_time = datetime.now()
+        
         try:
             # Executa análise tradicional primeiro
             traditional_result = super().analyze_market(symbol, notifier)
@@ -279,12 +377,70 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
             
             # Se análise IA não estiver habilitada, usa apenas tradicional
             if not self.analysis_enabled:
+                analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
+                
+                # Prepara dados para report simples
+                if notifier and hasattr(notifier, 'notify_analysis_report'):
+                    analysis_data = {
+                        'signals': [],
+                        'analysis_duration': analysis_duration,
+                        'traditional_analysis': {
+                            'should_trade': should_trade_traditional,
+                            'action': action_traditional,
+                            'price': price_traditional
+                        },
+                        'ai_analysis': None,
+                        'risk_assessment': None,
+                        'market_sentiment': None,
+                        'final_decision': {
+                            'should_trade': should_trade_traditional,
+                            'action': action_traditional,
+                            'reasoning': 'Análise tradicional (IA desabilitada)'
+                        }
+                    }
+                    
+                    # Envia report usando o novo método
+                    try:
+                        notifier.notify_analysis_report(symbol, analysis_data, self.analysis_config.get('timeframe', '1h'))
+                    except Exception as notification_error:
+                        self.logger.error(f"Erro ao enviar report de análise: {str(notification_error)}")
+                        # Fallback para log simples
+                        self.logger.info(f"Análise de {symbol} concluída em {analysis_duration:.2f}s - Resultado: {action_traditional if should_trade_traditional else 'sem ação'}")
+                
                 return traditional_result
             
             # Executa análise inteligente
             ai_analysis = self.get_ai_analysis(symbol)
             if not ai_analysis:
                 self.logger.warning(f"Análise IA não disponível para {symbol}, usando apenas análise tradicional")
+                analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
+                
+                # Prepara dados para report sem IA
+                if notifier and hasattr(notifier, 'notify_analysis_report'):
+                    analysis_data = {
+                        'signals': [],
+                        'analysis_duration': analysis_duration,
+                        'traditional_analysis': {
+                            'should_trade': should_trade_traditional,
+                            'action': action_traditional,
+                            'price': price_traditional
+                        },
+                        'ai_analysis': None,
+                        'risk_assessment': None,
+                        'market_sentiment': None,
+                        'final_decision': {
+                            'should_trade': should_trade_traditional,
+                            'action': action_traditional,
+                            'reasoning': 'Análise IA não disponível, usando análise tradicional'
+                        }
+                    }
+                    
+                    try:
+                        notifier.notify_analysis_report(symbol, analysis_data, self.analysis_config.get('timeframe', '1h'))
+                    except Exception as notification_error:
+                        self.logger.error(f"Erro ao enviar report de análise: {str(notification_error)}")
+                        self.logger.info(f"Análise de {symbol} concluída em {analysis_duration:.2f}s - Resultado: {action_traditional if should_trade_traditional else 'sem ação'}")
+                
                 return traditional_result
             
             # Extrai sinais da IA
@@ -299,6 +455,85 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                 ai_analysis=ai_analysis,
                 symbol=symbol
             )
+            
+            # Calcula duração da análise
+            analysis_duration = (datetime.now() - analysis_start_time).total_seconds()
+            
+            # Prepara dados completos para o report
+            if notifier and hasattr(notifier, 'notify_analysis_report'):
+                # Múltiplos sinais: adiciona informações detalhadas
+                multiple_signals_info = []
+                all_signals = ai_analysis.get('signals', [])
+                
+                # Adiciona informações sobre volume e tendências se disponíveis
+                for signal in all_signals:
+                    signal_info = f"{signal.get('signal_type', 'hold').upper()}"
+                    if signal.get('volume_analysis'):
+                        signal_info += f" - {signal.get('volume_analysis')}"
+                    if signal.get('trend_analysis'):
+                        signal_info += f"; {signal.get('trend_analysis')}"
+                    multiple_signals_info.append(signal_info)
+                
+                # Obtém sentimento do mercado (se disponível)
+                market_sentiment = None
+                if hasattr(self, 'get_market_sentiment_sync'):
+                    try:
+                        # Usa versão síncrona para evitar problemas de event loop
+                        market_sentiment = self.get_market_sentiment_sync(symbol)
+                    except Exception as sentiment_error:
+                        self.logger.warning(f"Erro ao obter sentimento do mercado: {str(sentiment_error)}")
+                        market_sentiment = {
+                            'sentiment_score': 0.0, 
+                            'sentiment_label': 'neutral', 
+                            'confidence': 0.1,
+                            'reasoning': f'Error getting sentiment: {str(sentiment_error)}'
+                        }
+                
+                analysis_data = {
+                    'signals': ai_signals,
+                    'analysis_duration': analysis_duration,
+                    'traditional_analysis': {
+                        'should_trade': should_trade_traditional,
+                        'action': action_traditional,
+                        'price': price_traditional
+                    },
+                    'ai_analysis': {
+                        'signals': all_signals,
+                        'best_signal': ai_signals[0] if ai_signals else None,
+                        'total_signals': len(all_signals),
+                        'valid_signals': len(ai_signals)
+                    },
+                    'risk_assessment': risk_assessment,
+                    'market_sentiment': market_sentiment,
+                    'final_decision': {
+                        'should_trade': final_decision[0],
+                        'action': final_decision[1],
+                        'reasoning': self._get_decision_reasoning(traditional_result, ai_signals, risk_assessment, final_decision)
+                    }
+                }
+                
+                # Envia report detalhado
+                try:
+                    notifier.notify_analysis_report(symbol, analysis_data, self.analysis_config.get('timeframe', '1h'))
+                except Exception as notification_error:
+                    self.logger.error(f"Erro ao enviar report de análise: {str(notification_error)}")
+                    # Fallback para logs detalhados
+                    signals_summary = f"{len(ai_signals)} sinais encontrados" if ai_signals else "0 sinais encontrados"
+                    if ai_signals:
+                        best_signal = ai_signals[0]
+                        signals_summary += f" - Melhor: {best_signal.get('signal_type', 'hold').upper()} ({best_signal.get('confidence', 0):.2%})"
+                    
+                    self.logger.info(f"Análise de {symbol} concluída em {analysis_duration:.2f}s - {signals_summary}")
+                    if multiple_signals_info:
+                        self.logger.info(f"{symbol}: Múltiplos sinais: {'; '.join(multiple_signals_info)}")
+                    
+                    # Logs existentes para compatibilidade
+                    for signal in ai_signals:
+                        self.logger.info(f"{symbol}: Melhor sinal IA - {signal.get('signal_type', 'hold').upper()} "
+                                       f"(confiança: {signal.get('confidence', 0):.2%}) - {signal.get('reasoning', 'N/A')}")
+                    
+                    result_text = final_decision[1] if final_decision[0] else 'sem ação'
+                    self.logger.info(f"Análise de {symbol} concluída em {analysis_duration:.2f}s - Resultado: {result_text}")
             
             return final_decision
             
@@ -413,6 +648,62 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
         except Exception as e:
             self.logger.error(f"Erro ao combinar análises para {symbol}: {str(e)}")
             return traditional_result
+    
+    def _get_decision_reasoning(self, traditional_result, ai_signals, risk_assessment, final_decision):
+        """
+        Gera texto explicativo sobre o raciocínio da decisão final
+        
+        Args:
+            traditional_result: Resultado da análise tradicional
+            ai_signals: Sinais da IA
+            risk_assessment: Avaliação de risco
+            final_decision: Decisão final tomada
+            
+        Returns:
+            str: Texto explicativo da decisão
+        """
+        try:
+            should_trade_traditional, action_traditional, _ = traditional_result
+            should_trade_final, action_final, _ = final_decision
+            
+            # Se não houve sinais da IA
+            if not ai_signals:
+                if should_trade_traditional:
+                    return f"Análise tradicional sugere {action_traditional.upper()}, mas IA não encontrou sinais válidos"
+                else:
+                    return "Nem análise tradicional nem IA encontraram oportunidades de trading"
+            
+            # Se houve sinais da IA
+            best_ai_signal = ai_signals[0]
+            ai_action = best_ai_signal.get('signal_type', 'hold')
+            ai_confidence = best_ai_signal.get('confidence', 0)
+            
+            if should_trade_final:
+                # Decisão de fazer trade
+                if should_trade_traditional and ai_action == action_traditional:
+                    return f"Concordância entre análise tradicional e IA ({ai_action.upper()}) - Confiança IA: {ai_confidence:.1%}"
+                elif should_trade_traditional and ai_action != action_traditional:
+                    return f"Conflito resolvido: IA ({ai_action.upper()}) prevaleceu sobre tradicional ({action_traditional.upper()}) - Confiança: {ai_confidence:.1%}"
+                elif not should_trade_traditional and ai_action == action_final:
+                    return f"IA sugere {ai_action.upper()} com alta confiança ({ai_confidence:.1%}) apesar da análise tradicional não confirmar"
+                else:
+                    return f"Análise tradicional sugere {action_traditional.upper()}, executando com cautela"
+            else:
+                # Decisão de não fazer trade
+                risk_level = risk_assessment.get('overall_risk', 'medium') if risk_assessment else 'medium'
+                
+                if should_trade_traditional and ai_action == 'hold':
+                    return f"Análise tradicional sugere {action_traditional.upper()}, mas IA recomenda aguardar (risco: {risk_level})"
+                elif should_trade_traditional and ai_action != action_traditional:
+                    return f"Conflito entre análises: tradicional ({action_traditional.upper()}) vs IA ({ai_action.upper()}) - Confiança insuficiente"
+                elif not should_trade_traditional and ai_action != 'hold':
+                    return f"IA sugere {ai_action.upper()} (conf: {ai_confidence:.1%}), mas análise tradicional não confirma e risco/confiança insuficiente"
+                else:
+                    return "Ambas as análises sugerem aguardar - Sem oportunidades claras"
+                    
+        except Exception as e:
+            self.logger.error(f"Erro ao gerar raciocínio da decisão: {str(e)}")
+            return "Decisão baseada em análise combinada"
     
     def execute_buy(self, symbol, price):
         """
