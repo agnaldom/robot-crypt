@@ -617,6 +617,41 @@ class TelegramNotifier:
             timeframe (str, optional): Timeframe da análise (ex: "1h", "4h", "1d")
         """
         try:
+            # Valida se analysis_data é um dicionário válido
+            if not analysis_data or not isinstance(analysis_data, dict):
+                self.logger.warning(f"Analysis data is None or not a dictionary for {symbol}")
+                analysis_data = {
+                    'signals': [],
+                    'analysis_duration': 0,
+                    'traditional_analysis': {
+                        'should_trade': False,
+                        'action': 'hold',
+                        'price': 0.0
+                    },
+                    'ai_analysis': {
+                        'signals': [],
+                        'best_signal': None,
+                        'total_signals': 0,
+                        'valid_signals': 0
+                    },
+                    'risk_assessment': {
+                        'overall_risk': 'medium',
+                        'risk_score': 0.5,
+                        'recommendations': []
+                    },
+                    'market_sentiment': {
+                        'sentiment_score': 0.0,
+                        'sentiment_label': 'neutral',
+                        'confidence': 0.1,
+                        'reasoning': 'Analysis data not available'
+                    },
+                    'final_decision': {
+                        'should_trade': False,
+                        'action': 'hold',
+                        'reasoning': 'Analysis data not available'
+                    }
+                }
+            
             # Formata a hora atual
             current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
             
@@ -783,8 +818,14 @@ class TelegramNotifier:
         except Exception as e:
             self.logger.error(f"Erro ao enviar report de análise: {str(e)}")
             # Fallback para notificação simples
-            simple_message = f"📊 Análise de {symbol} concluída - {len(analysis_data.get('signals', []))} sinais encontrados"
-            return self.send_message(simple_message)
+            try:
+                signals_count = len(analysis_data.get('signals', [])) if analysis_data else 0
+                simple_message = f"📊 Análise de {symbol} concluída - {signals_count} sinais encontrados"
+                return self.send_message(simple_message)
+            except Exception as fallback_error:
+                self.logger.error(f"Erro no fallback de notificação: {fallback_error}")
+                # Última tentativa com mensagem mínima
+                return self.send_message(f"📊 Análise de {symbol} concluída")
         
     def notify_analysis(self, symbol, data_type, details, chart_data=None, timeframe=None):
         """

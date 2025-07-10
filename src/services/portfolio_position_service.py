@@ -2,6 +2,7 @@
 Portfolio Position Service for CRUD operations.
 """
 from typing import List, Optional
+from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
@@ -128,3 +129,23 @@ class PortfolioPositionService:
             "best_performing_asset": best_performing.symbol,
             "worst_performing_asset": worst_performing.symbol
         }
+    
+    def calculate_position_value(self, quantity: Decimal, current_price: Decimal) -> Decimal:
+        """Calculate position value (quantity * current_price)."""
+        return quantity * current_price
+    
+    def calculate_profit_loss(self, quantity: Decimal, current_price: Decimal, average_price: Decimal) -> Decimal:
+        """Calculate profit/loss (quantity * (current_price - average_price))."""
+        return quantity * (current_price - average_price)
+    
+    def calculate_profit_loss_percentage(self, quantity: Decimal, current_price: Decimal, average_price: Decimal) -> Decimal:
+        """Calculate profit/loss percentage ((current_price - average_price) / average_price * 100)."""
+        if average_price == 0:
+            return Decimal("0.00")
+        return ((current_price - average_price) / average_price) * Decimal("100")
+    
+    def calculate_allocation_percentage(self, position_value: Decimal, total_portfolio_value: Decimal) -> Decimal:
+        """Calculate allocation percentage (position_value / total_portfolio_value * 100)."""
+        if total_portfolio_value == 0:
+            return Decimal("0.00")
+        return (position_value / total_portfolio_value) * Decimal("100")

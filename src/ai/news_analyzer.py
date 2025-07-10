@@ -87,32 +87,60 @@ class LLMNewsAnalyzer:
         - Use proper boolean values (true/false, not True/False)
         """
     
-    async def analyze_crypto_news(self, 
-                                  news_items: List[CryptoNewsItem], 
-                                  symbol: Optional[str] = None) -> NewsAnalysis:
+    async def analyze_crypto_news(self, news_items: List[CryptoNewsItem], symbol: str = None) -> NewsAnalysis:
+        """Alias for analyze_sentiment to maintain compatibility"""
+        return await self.analyze_sentiment(news_items, symbol)
+    
+    def _generate_cache_key(self, news_items: List[CryptoNewsItem], symbol: Optional[str]) -> str:
+        """Gera chave de cache baseada nos itens de notícia"""
+        # Create hash from titles and timestamps
+        content_hash = hash(tuple(
+            (item.title, item.published_at.isoformat()) 
+            for item in news_items[:10]
+        ))
+        
+        return f"news_analysis_{symbol or 'general'}_{content_hash}"
+    
+    def _combine_news_for_analysis(self, news_items: List[CryptoNewsItem]) -> str:
+        """Combina notícias para análise limitando o tamanho"""
+        news_texts = []
+        for i, item in enumerate(news_items[:5], 1):  # Limite de 5 notícias
+            news_text = f"{i}. {item.title[:150]}"  # Limita título
+            if item.content:
+                news_text += f" - {item.content[:200]}"  # Limita conteúdo
+            news_texts.append(news_text)
+        
+        full_text = "\n".join(news_texts)
+        # Limita texto total para evitar problemas de token
+        if len(full_text) > 1500:
+            full_text = full_text[:1500] + "..."
+        
+        return full_text
+    
+    async def analyze_sentiment(self, news_items: List[CryptoNewsItem], symbol: str = None) -> NewsAnalysis:
         """
-        Analisa notícias de criptomoedas usando LLM
+        Analisa o sentimento geral das notícias usando LLM
         
         Args:
-            news_items: Lista de itens de notícia
-            symbol: Símbolo específico para análise (opcional)
+            news_items: Lista de notícias
+            symbol: Símbolo da criptomoeda (opcional)
             
         Returns:
-            NewsAnalysis com análise completa
+            Análise de sentimento
         """
         try:
             if not news_items:
                 return self._create_neutral_analysis(0, "No news items provided")
             
-            # Check cache
-            cache_key = self._create_cache_key(news_items, symbol)
-            cached_result = self._get_cached_analysis(cache_key)
-            if cached_result:
-                self.logger.info("Returning cached news analysis")
-                return cached_result
-            # Prepare news data for analysis
-            news_text = self._prepare_news_text(news_items, symbol)
-
+            # Check cache first
+            cache_key = self._generate_cache_key(news_items, symbol)
+            cached_analysis = self._get_cached_analysis(cache_key)
+            if cached_analysis:
+                return cached_analysis
+            
+            # Combine news into analysis text
+            news_text = self._combine_news_for_analysis(news_items)
+            
             # Sanitize input
             try:
                 sanitized_text = ai_security_guard.sanitize_ai_input(news_text, "sentiment")
@@ -129,12 +157,19 @@ class LLMNewsAnalyzer:
                 self.logger.warning(f"Prompt has low safety score: {optimized_prompt_obj.safety_score:.2f}")
                 self.logger.info(f"Applied optimizations: {optimized_prompt_obj.modifications}")
             
-            # Get LLM analysis with optimized prompt
-            response = await self.llm_client.analyze_json(
-                prompt=optimized_prompt_obj.optimized_prompt,
-                system_prompt=self.system_prompt,
-                schema=self._get_analysis_schema()
-            )
+            # Get LLM analysis with optimized prompt and timeout
+            try:
+                response = await asyncio.wait_for(
+                    self.llm_client.analyze_json(
+                        prompt=optimized_prompt_obj.optimized_prompt,
+                        system_prompt=self.system_prompt,
+                        schema=self._get_analysis_schema()
+                    ),
+                    timeout=10.0  # 10 second timeout
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning(f"LLM analysis timed out for {symbol or 'general'}")
+                return self._create_neutral_analysis(len(news_items), "Analysis timed out")
             
             # Check for blocking by safety filters or JSON parsing errors
             if response.get("error") == "blocked_by_safety_filters":

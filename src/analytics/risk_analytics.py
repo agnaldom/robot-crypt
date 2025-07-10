@@ -143,14 +143,24 @@ class RiskAnalytics:
                 recovery_date = recovery_prices.index[0]
         
         # Duração do drawdown
-        if peak_before and max_dd_date:
-            dd_duration = (max_dd_date - peak_before).days
+        if peak_before is not None and max_dd_date is not None:
+            try:
+                # Try datetime calculation first
+                dd_duration = (max_dd_date - peak_before).days
+            except AttributeError:
+                # Handle non-datetime indices (e.g., integer indices)
+                dd_duration = abs(max_dd_date - peak_before)
         else:
             dd_duration = 0
         
         # Tempo de recuperação
-        if recovery_date and max_dd_date:
-            recovery_duration = (recovery_date - max_dd_date).days
+        if recovery_date is not None and max_dd_date is not None:
+            try:
+                # Try datetime calculation first
+                recovery_duration = (recovery_date - max_dd_date).days
+            except AttributeError:
+                # Handle non-datetime indices (e.g., integer indices)
+                recovery_duration = abs(recovery_date - max_dd_date)
         else:
             recovery_duration = None
         
@@ -229,6 +239,7 @@ class RiskAnalytics:
             'volatility_skew': clean_returns.skew(),
             'volatility_kurtosis': clean_returns.kurtosis()
         }
+    
     
     def _estimate_garch_volatility(self, returns: pd.Series, 
                                   alpha: float = 0.1, beta: float = 0.8) -> float:

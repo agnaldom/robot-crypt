@@ -15,8 +15,9 @@ class PortfolioAsset(Base):
     
     # Asset details
     symbol = Column(String, nullable=False)
+    name = Column(String, nullable=True)
     quantity = Column(Float, nullable=False)
-    avg_buy_price = Column(Float, nullable=False)
+    average_price = Column(Float, nullable=False)
     current_price = Column(Float, nullable=False)
     
     # Asset values
@@ -34,7 +35,7 @@ class PortfolioAsset(Base):
     is_active = Column(Boolean, default=True)
     
     # Timestamps
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships
     portfolio = relationship("Portfolio", back_populates="assets")

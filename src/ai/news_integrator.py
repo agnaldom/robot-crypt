@@ -53,32 +53,60 @@ class NewsIntegrator:
             Análise de sentimento do mercado
         """
         try:
-            # Busca notícias recentes
-            news_items = await self._fetch_recent_news(symbols)
+            # Busca notícias recentes com timeout
+            news_items = await asyncio.wait_for(
+                self._fetch_recent_news(symbols),
+                timeout=15.0  # 15 segundos para buscar notícias
+            )
             
             if not news_items:
                 self.logger.warning("Nenhuma notícia encontrada para análise")
                 return self._create_neutral_sentiment()
             
-            # Analisa sentimento com IA
-            sentiment_analysis = await self.news_analyzer.analyze_crypto_news(
-                news_items, 
-                symbol=symbols[0] if symbols else None
-            )
+            # Analisa sentimento com IA - com timeout mais longo
+            try:
+                sentiment_analysis = await asyncio.wait_for(
+                    self.news_analyzer.analyze_crypto_news(
+                        news_items, 
+                        symbol=symbols[0] if symbols else None
+                    ),
+                    timeout=30.0  # 30 segundos para análise de sentimento
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Timeout na análise de sentimento para {symbols[0] if symbols else 'mercado geral'}")
+                return self._create_neutral_sentiment_with_timeout(symbols)
             
-            # Detecta eventos importantes
-            events = await self.news_analyzer.detect_market_events(news_items)
+            # Validar se a análise de sentimento foi bem-sucedida
+            if sentiment_analysis is None:
+                self.logger.warning("Análise de sentimento retornou None")
+                return self._create_neutral_sentiment()
             
+            # Verificar se é um objeto dict válido
+            if not isinstance(sentiment_analysis, dict):
+                self.logger.warning(f"Análise de sentimento retornou tipo inválido: {type(sentiment_analysis)}")
+                return self._create_neutral_sentiment()
+            
+            # Detecta eventos importantes - com timeout menor
+            try:
+                events = await asyncio.wait_for(
+                    self.news_analyzer.detect_market_events(news_items),
+                    timeout=10.0  # 10 segundos para detecção de eventos
+                )
+            except asyncio.TimeoutError:
+                self.logger.warning("Timeout na detecção de eventos")
+                events = []
+            
+            # Criar dados de sentimento de forma segura
             sentiment_data = {
-                'sentiment_score': sentiment_analysis.sentiment_score,
-                'sentiment_label': sentiment_analysis.sentiment_label,
-                'confidence': sentiment_analysis.confidence,
-                'impact_level': sentiment_analysis.impact_level,
-                'key_events': sentiment_analysis.key_events,
-                'price_prediction': sentiment_analysis.price_prediction,
-                'reasoning': sentiment_analysis.reasoning,
-                'article_count': sentiment_analysis.article_count,
-                'detected_events': events,
+                'sentiment_score': sentiment_analysis.get('sentiment_score', 0.0),
+                'sentiment_label': sentiment_analysis.get('sentiment_label', 'neutral'),
+                'confidence': sentiment_analysis.get('confidence', 0.1),
+                'impact_level': sentiment_analysis.get('impact_level', 'low'),
+                'key_events': sentiment_analysis.get('key_events', []),
+                'price_prediction': sentiment_analysis.get('price_prediction', 'neutral'),
+                'reasoning': sentiment_analysis.get('reasoning', 'Analysis completed'),
+                'article_count': sentiment_analysis.get('article_count', 0),
+                'detected_events': events if events is not None else [],
                 'timestamp': datetime.now().isoformat()
             }
             
@@ -363,6 +391,22 @@ class NewsIntegrator:
             'timestamp': datetime.now().isoformat()
         }
     
+    def _create_neutral_sentiment_with_timeout(self, symbols: List[str] = None) -> Dict[str, Any]:
+        """Cria análise de sentimento neutra para casos de timeout"""
+        symbol_str = symbols[0] if symbols else 'mercado geral'
+        return {
+            'sentiment_score': 0.0,
+            'sentiment_label': 'neutral',
+            'confidence': 0.1,
+            'impact_level': 'low',
+            'key_events': [],
+            'price_prediction': 'neutral',
+            'reasoning': f'Timeout during sentiment analysis for {symbol_str} - using neutral fallback',
+            'article_count': 0,
+            'detected_events': [],
+            'timestamp': datetime.now().isoformat()
+        }
+    
     async def _save_analysis_to_database(self, symbol: str, analysis_type: str, data: Dict[str, Any]):
         """Salva análise no banco de dados"""
         try:
@@ -400,7 +444,18 @@ class NewsIntegrator:
     
     async def get_symbol_sentiment(self, symbol: str) -> Dict[str, Any]:
         """Obtém sentimento específico para um símbolo"""
-        return await self.get_market_sentiment([symbol])
+        try:
+            # Add timeout to prevent hanging
+            return await asyncio.wait_for(
+                self.get_market_sentiment([symbol]),
+                timeout=8.0  # 8 second timeout
+            )
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Timeout na análise de sentimento para {symbol}")
+            return self._create_neutral_sentiment_with_timeout([symbol])
+        except Exception as e:
+            self.logger.error(f"Erro ao obter sentimento para {symbol}: {e}")
+            return self._create_neutral_sentiment_with_timeout([symbol])
     
     async def get_sentiment_summary(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
         """Obtém resumo de sentimento para múltiplos símbolos"""

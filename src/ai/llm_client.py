@@ -342,15 +342,31 @@ class LLMClient:
                 candidate = response.candidates[0]
                 finish_reason = getattr(candidate, 'finish_reason', None)
                 
-                # Check for safety-related blocking
-                if finish_reason in [2, 3, 4, 5]:  # SAFETY, RECITATION, OTHER, BLOCKED
+                # Log the actual finish reason for debugging
+                self.logger.debug(f"Gemini finish_reason: {finish_reason} (type: {type(finish_reason)})")
+                
+                # Check for safety-related blocking - handle both enum and integer values
+                blocked_reasons = [2, 3, 4, 5]  # SAFETY, RECITATION, OTHER, BLOCKED
+                if finish_reason in blocked_reasons:
                     self.logger.warning(f"Gemini response blocked by safety filters (finish_reason: {finish_reason})")
                     return None
+                    
+                # Also check for string representations
+                if isinstance(finish_reason, str):
+                    blocked_str_reasons = ['SAFETY', 'RECITATION', 'OTHER', 'BLOCKED']
+                    if finish_reason in blocked_str_reasons:
+                        self.logger.warning(f"Gemini response blocked by safety filters (finish_reason: {finish_reason})")
+                        return None
             
             return response
             
         except Exception as e:
-            self.logger.warning(f"Gemini request with safety settings failed: {e}")
+            # Log more detailed error information
+            error_msg = str(e)
+            if "safety" in error_msg.lower() or "filter" in error_msg.lower():
+                self.logger.warning(f"Gemini request blocked by safety filters: {error_msg}")
+            else:
+                self.logger.warning(f"Gemini request with safety settings failed: {error_msg}")
             return None
     
     def _get_relaxed_safety_settings(self) -> List[Dict]:
@@ -560,25 +576,132 @@ class LLMClient:
         # Match patterns like: word: "value" and convert to "word": "value"
         content = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', content)
         
-        # Fix single quotes to double quotes
-        content = content.replace("'", '"')
-        
-        # Fix trailing commas
+        # Fix trailing commas first (before other quote fixes)
         content = re.sub(r',\s*}', '}', content)
         content = re.sub(r',\s*]', ']', content)
         
         # Fix multiple consecutive commas
         content = re.sub(r',+', ',', content)
         
-        # Fix missing commas between properties
-        content = re.sub(r'"\s*"([a-zA-Z_])', r'", "\1', content)
-        
         # Fix boolean values
         content = re.sub(r':\s*true\b', ': true', content)
         content = re.sub(r':\s*false\b', ': false', content)
         content = re.sub(r':\s*null\b', ': null', content)
         
+        # Fix problematic quotes in strings - use simple string replacements
+        # This handles the most common cases without complex regex
+        
+        # Direct replacements for common patterns
+        # Handle the specific case first: "Trump"s tariffs -> "Trump's tariffs"
+        content = re.sub(r'"Trump"s tariffs', '"Trump\'s tariffs', content)
+        
+        # More general patterns  
+        content = content.replace('"Trump"s', '"Trump\'s"')
+        content = content.replace('"Biden"s', '"Biden\'s"')
+        content = content.replace('"China"s', '"China\'s"')
+        content = content.replace('"America"s', '"America\'s"')
+        content = content.replace('"U.S."s', '"U.S.\'s"')
+        content = content.replace('"EU"s', '"EU\'s"')
+        content = content.replace('"UK"s', '"UK\'s"')
+        
+        # Handle generic possessives pattern: "word"s -> "word's"
+        content = re.sub(r'"([A-Za-z]+)"s\b', r'"\1\'s"', content)
+        
+        # Handle contractions: "word"t -> "word't"
+        content = re.sub(r'"([A-Za-z]+)"t\b', r'"\1\'t"', content)
+        content = re.sub(r'"([A-Za-z]+)"d\b', r'"\1\'d"', content)
+        content = re.sub(r'"([A-Za-z]+)"ll\b', r'"\1\'ll"', content)
+        content = re.sub(r'"([A-Za-z]+)"ve\b', r'"\1\'ve"', content)
+        content = re.sub(r'"([A-Za-z]+)"re\b', r'"\1\'re"', content)
+        
+        # Fix missing commas between properties
+        content = re.sub(r'"\s*"([a-zA-Z_])', r'", "\1', content)
+        
+        # Fix truncated strings by ensuring they're properly closed
+        lines = content.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # If line has an opening quote but no closing quote (common with truncated content)
+            if line.count('"') % 2 == 1 and line.strip().endswith('...'):
+                # Close the string properly
+                line = line.rstrip('...') + '..."'
+            fixed_lines.append(line)
+        
+        content = '\n'.join(fixed_lines)
+        
         return content.strip()
+    
+    def _create_fallback_sentiment_response(self, json_content: str) -> Dict[str, Any]:
+        """Create fallback response for sentiment analysis when JSON parsing fails"""
+        try:
+            # Try to extract basic sentiment information from the malformed JSON
+            import re
+            
+            # Default fallback response
+            fallback_response = {
+                "sentiment_score": 0.0,
+                "sentiment_label": "neutral",
+                "confidence": 0.1,
+                "impact_level": "low",
+                "key_events": [],
+                "price_prediction": "neutral",
+                "reasoning": "JSON parsing failed, using fallback analysis"
+            }
+            
+            # Try to extract sentiment score from the content
+            score_match = re.search(r'"sentiment_score"\s*:\s*([\-\d\.]+)', json_content)
+            if score_match:
+                try:
+                    sentiment_score = float(score_match.group(1))
+                    fallback_response["sentiment_score"] = max(-1.0, min(1.0, sentiment_score))
+                except ValueError:
+                    pass
+            
+            # Try to extract sentiment label
+            label_match = re.search(r'"sentiment_label"\s*:\s*"([^"]+)"', json_content)
+            if label_match:
+                sentiment_label = label_match.group(1).lower()
+                if sentiment_label in ['positive', 'negative', 'neutral', 'bullish', 'bearish']:
+                    fallback_response["sentiment_label"] = sentiment_label
+            
+            # Try to extract confidence
+            confidence_match = re.search(r'"confidence"\s*:\s*([\d\.]+)', json_content)
+            if confidence_match:
+                try:
+                    confidence = float(confidence_match.group(1))
+                    fallback_response["confidence"] = max(0.0, min(1.0, confidence))
+                except ValueError:
+                    pass
+            
+            # Try to extract impact level
+            impact_match = re.search(r'"impact_level"\s*:\s*"([^"]+)"', json_content)
+            if impact_match:
+                impact_level = impact_match.group(1).lower()
+                if impact_level in ['low', 'medium', 'high']:
+                    fallback_response["impact_level"] = impact_level
+            
+            # Try to extract key events (simple extraction)
+            events_match = re.search(r'"key_events"\s*:\s*\[([^\]]+)\]', json_content)
+            if events_match:
+                events_str = events_match.group(1)
+                events = re.findall(r'"([^"]+)"', events_str)
+                fallback_response["key_events"] = events[:5]  # Limit to 5 events
+            
+            self.logger.info(f"Created fallback sentiment response: {fallback_response['sentiment_label']} (score: {fallback_response['sentiment_score']:.2f})")
+            return fallback_response
+            
+        except Exception as e:
+            self.logger.error(f"Error creating fallback sentiment response: {e}")
+            return {
+                "sentiment_score": 0.0,
+                "sentiment_label": "neutral",
+                "confidence": 0.1,
+                "impact_level": "low",
+                "key_events": [],
+                "price_prediction": "neutral",
+                "reasoning": f"Complete parsing failure: {str(e)}"
+            }
     
     async def analyze_json(self, 
                           prompt: str, 
@@ -597,7 +720,17 @@ class LLMClient:
         """
         try:
             # Add JSON instruction to system prompt
-            json_instruction = "Always respond with valid JSON format. Do not include any text outside the JSON structure."
+            json_instruction = """Always respond with valid JSON format. Do not include any text outside the JSON structure.
+            
+IMPORTANT JSON RULES:
+            - Use double quotes for all strings
+            - Escape quotes within strings using backslash (\")
+            - Use apostrophes (') for possessives like "Trump's" not "Trump"s"
+            - Do not use trailing commas
+            - Ensure all brackets and braces are properly closed
+            - Use proper boolean values (true/false, not True/False)
+            """
+            
             if schema:
                 json_instruction += f"\n\nExpected schema: {json.dumps(schema, indent=2)}"
             
@@ -641,6 +774,15 @@ class LLMClient:
                 
                 content = content.strip()
                 
+                # Check if content is empty or very short (possible timeout/truncation)
+                if not content or len(content) < 10:
+                    self.logger.warning(f"Content is empty or too short: '{content}'")
+                    return {
+                        "error": "empty_response",
+                        "message": "LLM response was empty or truncated",
+                        "raw_content": response.content
+                    }
+                
                 # Try to fix common JSON formatting issues
                 content = self._fix_json_formatting(content)
                 
@@ -660,7 +802,9 @@ class LLMClient:
                             return json.loads(fixed_json)
                         except json.JSONDecodeError as e3:
                             self.logger.error(f"All JSON parsing attempts failed. Content: {json_content[:200]}...")
-                            pass
+                            
+                            # Try to salvage partial JSON for sentiment analysis
+                            return self._create_fallback_sentiment_response(json_content)
                 
                 # If all else fails, try to parse the original content
                 try:

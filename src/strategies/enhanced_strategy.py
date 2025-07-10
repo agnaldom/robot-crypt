@@ -188,6 +188,23 @@ class EnhancedTradingStrategy(TradingStrategy):
                 timeout=10.0  # 10 segundos timeout
             )
             
+            # Validar se o sentimento retornado é válido
+            if sentiment is None:
+                self.logger.warning(f"Sentimento retornado é None para {symbol}")
+                return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1, 'reasoning': 'Sentiment analysis returned None'}
+            
+            # Verificar se o sentimento tem as chaves necessárias
+            if not isinstance(sentiment, dict):
+                self.logger.warning(f"Sentimento retornado não é um dicionário para {symbol}: {type(sentiment)}")
+                return {'sentiment_score': 0.0, 'sentiment_label': 'neutral', 'confidence': 0.1, 'reasoning': 'Invalid sentiment format'}
+            
+            # Garantir que as chaves obrigatórias existem
+            required_keys = ['sentiment_score', 'sentiment_label', 'confidence']
+            for key in required_keys:
+                if key not in sentiment:
+                    self.logger.warning(f"Chave '{key}' ausente no sentimento para {symbol}")
+                    sentiment[key] = 0.0 if key == 'sentiment_score' or key == 'confidence' else 'neutral'
+            
             self.logger.info(f"Sentimento de mercado para {symbol}: {sentiment['sentiment_label']} "
                            f"(score: {sentiment['sentiment_score']:.2f}, confiaça: {sentiment['confidence']:.2f})")
             return sentiment
@@ -243,6 +260,24 @@ class EnhancedTradingStrategy(TradingStrategy):
                             timeout=8.0
                         )
                     )
+                    
+                    # Validar sentimento retornado
+                    if sentiment is None:
+                        self.logger.warning(f"Sentimento retornado é None para {symbol} (sync)")
+                        return self._get_fallback_sentiment(symbol, clean_symbol)
+                    
+                    # Verificar se é um dicionário válido
+                    if not isinstance(sentiment, dict):
+                        self.logger.warning(f"Sentimento retornado não é um dicionário para {symbol} (sync): {type(sentiment)}")
+                        return self._get_fallback_sentiment(symbol, clean_symbol)
+                    
+                    # Garantir que as chaves obrigatórias existem
+                    required_keys = ['sentiment_score', 'sentiment_label', 'confidence']
+                    for key in required_keys:
+                        if key not in sentiment:
+                            self.logger.warning(f"Chave '{key}' ausente no sentimento para {symbol} (sync)")
+                            sentiment[key] = 0.0 if key == 'sentiment_score' or key == 'confidence' else 'neutral'
+                    
                     self.logger.info(f"Sentimento de mercado obtido para {symbol}: {sentiment['sentiment_label']}")
                     return sentiment
                     
@@ -285,6 +320,125 @@ class EnhancedTradingStrategy(TradingStrategy):
         base_sentiment['reasoning'] = f'Fallback sentiment for {symbol} (sync mode)'
         
         return base_sentiment
+    
+    def _validate_analysis_data(self, analysis_data: Dict[str, Any], symbol: str) -> Dict[str, Any]:
+        """
+        Valida e corrige os dados de análise antes de enviar para o notifier
+        
+        Args:
+            analysis_data: Dados de análise original
+            symbol: Símbolo analisado
+            
+        Returns:
+            Dados validados e corrigidos
+        """
+        try:
+            # Cria cópia dos dados para evitar modificação do original
+            validated_data = analysis_data.copy() if analysis_data else {}
+            
+            # Validação básica da estrutura
+            if not isinstance(validated_data, dict):
+                self.logger.error(f"Analysis data is not a dictionary for {symbol}: {type(validated_data)}")
+                return self._create_fallback_analysis_data(symbol)
+            
+            # Valida sinais
+            if 'signals' not in validated_data or not isinstance(validated_data['signals'], list):
+                validated_data['signals'] = []
+            
+            # Valida analysis_duration
+            if 'analysis_duration' not in validated_data or not isinstance(validated_data['analysis_duration'], (int, float)):
+                validated_data['analysis_duration'] = 0.0
+            
+            # Valida traditional_analysis
+            if 'traditional_analysis' not in validated_data or not isinstance(validated_data['traditional_analysis'], dict):
+                validated_data['traditional_analysis'] = {
+                    'should_trade': False,
+                    'action': 'hold',
+                    'price': 0.0
+                }
+            
+            # Valida ai_analysis
+            if 'ai_analysis' not in validated_data or not isinstance(validated_data['ai_analysis'], dict):
+                validated_data['ai_analysis'] = {
+                    'signals': [],
+                    'best_signal': None,
+                    'total_signals': 0,
+                    'valid_signals': 0
+                }
+            
+            # Valida risk_assessment
+            if 'risk_assessment' not in validated_data or not isinstance(validated_data['risk_assessment'], dict):
+                validated_data['risk_assessment'] = {
+                    'overall_risk': 'medium',
+                    'risk_score': 0.5,
+                    'recommendations': ['Use gerenciamento de risco padrão']
+                }
+            
+            # Valida market_sentiment
+            if 'market_sentiment' not in validated_data or not isinstance(validated_data['market_sentiment'], dict):
+                validated_data['market_sentiment'] = {
+                    'sentiment_score': 0.0,
+                    'sentiment_label': 'neutral',
+                    'confidence': 0.1,
+                    'reasoning': 'Market sentiment not available'
+                }
+            
+            # Valida final_decision
+            if 'final_decision' not in validated_data or not isinstance(validated_data['final_decision'], dict):
+                validated_data['final_decision'] = {
+                    'should_trade': False,
+                    'action': 'hold',
+                    'reasoning': 'No valid decision available'
+                }
+            
+            self.logger.debug(f"Analysis data validated successfully for {symbol}")
+            return validated_data
+            
+        except Exception as e:
+            self.logger.error(f"Error validating analysis data for {symbol}: {str(e)}")
+            return self._create_fallback_analysis_data(symbol)
+    
+    def _create_fallback_analysis_data(self, symbol: str) -> Dict[str, Any]:
+        """
+        Cria dados de análise de fallback para casos de erro
+        
+        Args:
+            symbol: Símbolo analisado
+            
+        Returns:
+            Dados de análise de fallback
+        """
+        return {
+            'signals': [],
+            'analysis_duration': 0.0,
+            'traditional_analysis': {
+                'should_trade': False,
+                'action': 'hold',
+                'price': 0.0
+            },
+            'ai_analysis': {
+                'signals': [],
+                'best_signal': None,
+                'total_signals': 0,
+                'valid_signals': 0
+            },
+            'risk_assessment': {
+                'overall_risk': 'medium',
+                'risk_score': 0.5,
+                'recommendations': ['Use gerenciamento de risco padrão']
+            },
+            'market_sentiment': {
+                'sentiment_score': 0.0,
+                'sentiment_label': 'neutral',
+                'confidence': 0.1,
+                'reasoning': 'Fallback analysis - original data validation failed'
+            },
+            'final_decision': {
+                'should_trade': False,
+                'action': 'hold',
+                'reasoning': f'Fallback analysis for {symbol} due to data validation failure'
+            }
+        }
     
     def adjust_position_size_for_risk(self, base_position_size: float,
                                     risk_assessment: Dict[str, Any]) -> float:
@@ -480,6 +634,17 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                     try:
                         # Usa versão síncrona para evitar problemas de event loop
                         market_sentiment = self.get_market_sentiment_sync(symbol)
+                        
+                        # Valida se o sentimento foi obtido corretamente
+                        if market_sentiment is None:
+                            self.logger.warning(f"Sentimento do mercado retornou None para {symbol}")
+                            market_sentiment = {
+                                'sentiment_score': 0.0, 
+                                'sentiment_label': 'neutral', 
+                                'confidence': 0.1,
+                                'reasoning': 'Market sentiment analysis returned None'
+                            }
+                        
                     except Exception as sentiment_error:
                         self.logger.warning(f"Erro ao obter sentimento do mercado: {str(sentiment_error)}")
                         market_sentiment = {
@@ -488,6 +653,14 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                             'confidence': 0.1,
                             'reasoning': f'Error getting sentiment: {str(sentiment_error)}'
                         }
+                else:
+                    # Fallback se o método não existir
+                    market_sentiment = {
+                        'sentiment_score': 0.0, 
+                        'sentiment_label': 'neutral', 
+                        'confidence': 0.1,
+                        'reasoning': 'Market sentiment analysis not available'
+                    }
                 
                 analysis_data = {
                     'signals': ai_signals,
@@ -512,9 +685,12 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                     }
                 }
                 
+                # Valida os dados de análise antes de enviar
+                validated_analysis_data = self._validate_analysis_data(analysis_data, symbol)
+                
                 # Envia report detalhado
                 try:
-                    notifier.notify_analysis_report(symbol, analysis_data, self.analysis_config.get('timeframe', '1h'))
+                    notifier.notify_analysis_report(symbol, validated_analysis_data, self.analysis_config.get('timeframe', '1h'))
                 except Exception as notification_error:
                     self.logger.error(f"Erro ao enviar report de análise: {str(notification_error)}")
                     # Fallback para logs detalhados
@@ -568,10 +744,14 @@ class EnhancedScalpingStrategy(EnhancedTradingStrategy, ScalpingStrategy):
                 # Diagnóstico: vamos verificar se há sinais com confiança menor
                 all_signals = ai_analysis.get('signals', [])
                 if all_signals:
-                    low_confidence_signals = [s for s in all_signals if s.confidence < self.analysis_config['min_confidence_threshold']]
+                    low_confidence_signals = []
+                    for s in all_signals:
+                        if isinstance(s, dict) and 'confidence' in s and s['confidence'] < self.analysis_config['min_confidence_threshold']:
+                            low_confidence_signals.append(s)
+                    
                     if low_confidence_signals:
-                        best_low = max(low_confidence_signals, key=lambda s: s.confidence)
-                        self.logger.info(f"[{symbol}]: Melhor sinal de baixa confiança: {best_low.signal_type} ({best_low.confidence:.2%}) - {best_low.reasoning}")
+                        best_low = max(low_confidence_signals, key=lambda s: s.get('confidence', 0))
+                        self.logger.info(f"[{symbol}]: Melhor sinal de baixa confiança: {best_low.get('signal_type', 'unknown')} ({best_low.get('confidence', 0):.2%}) - {best_low.get('reasoning', 'N/A')}")
                     else:
                         self.logger.info(f"[{symbol}]: Nenhum sinal gerado pela análise IA")
                 else:

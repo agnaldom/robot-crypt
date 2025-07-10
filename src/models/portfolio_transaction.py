@@ -40,3 +40,15 @@ class PortfolioTransaction(Base):
     portfolio = relationship("Portfolio", back_populates="transactions")
     user = relationship("User", back_populates="portfolio_transactions")
     asset = relationship("Asset")
+    
+    def __setattr__(self, name, value):
+        if name == 'metadata':
+            super().__setattr__('transaction_metadata', value)
+        else:
+            super().__setattr__(name, value)
+    
+    def __getattribute__(self, name):
+        if name == 'metadata':
+            return super().__getattribute__('transaction_metadata')
+        else:
+            return super().__getattribute__(name)

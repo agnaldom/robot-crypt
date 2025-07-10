@@ -1,21 +1,22 @@
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
+from decimal import Decimal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 # Portfolio Snapshot Schemas
 class PortfolioAssetBase(BaseModel):
+    snapshot_id: int
     asset_id: int
     symbol: str
-    quantity: float
-    avg_buy_price: float
-    current_price: float
-    invested_value: float
-    current_value: float
-    profit_loss: float
-    profit_loss_percentage: float
-    allocation_percentage: float
-    is_active: bool = True
+    name: str
+    quantity: Decimal
+    average_price: Decimal
+    current_price: Decimal
+    current_value: Decimal
+    profit_loss: Decimal
+    profit_loss_percentage: Decimal
+    allocation_percentage: Decimal
 
 
 class PortfolioAssetCreate(PortfolioAssetBase):
@@ -23,21 +24,18 @@ class PortfolioAssetCreate(PortfolioAssetBase):
 
 
 class PortfolioAssetUpdate(BaseModel):
-    quantity: Optional[float] = None
-    avg_buy_price: Optional[float] = None
-    current_price: Optional[float] = None
-    invested_value: Optional[float] = None
-    current_value: Optional[float] = None
-    profit_loss: Optional[float] = None
-    profit_loss_percentage: Optional[float] = None
-    allocation_percentage: Optional[float] = None
-    is_active: Optional[bool] = None
+    quantity: Optional[Decimal] = None
+    average_price: Optional[Decimal] = None
+    current_price: Optional[Decimal] = None
+    current_value: Optional[Decimal] = None
+    profit_loss: Optional[Decimal] = None
+    profit_loss_percentage: Optional[Decimal] = None
+    allocation_percentage: Optional[Decimal] = None
 
 
 class PortfolioAssetInDB(PortfolioAssetBase):
     id: int
-    snapshot_id: int
-    updated_at: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -45,17 +43,17 @@ class PortfolioAssetInDB(PortfolioAssetBase):
 # Portfolio Snapshot Schemas
 class PortfolioSnapshotBase(BaseModel):
     user_id: int
-    total_invested_value: float
-    current_market_value: float
-    total_profit_loss: float
-    profit_loss_percentage: float
+    total_invested_value: Decimal
+    current_market_value: Decimal
+    total_profit_loss: Decimal
+    profit_loss_percentage: Decimal
     risk_level: Optional[str] = None
-    value_at_risk: Optional[float] = None
-    max_drawdown: Optional[float] = None
-    volatility: Optional[float] = None
-    sharpe_ratio: Optional[float] = None
-    btc_comparison: Optional[float] = None
-    eth_comparison: Optional[float] = None
+    value_at_risk: Optional[Decimal] = None
+    max_drawdown: Optional[Decimal] = None
+    volatility: Optional[Decimal] = None
+    sharpe_ratio: Optional[Decimal] = None
+    btc_comparison: Optional[Decimal] = None
+    eth_comparison: Optional[Decimal] = None
     metrics: Dict[str, Any] = {}
 
 
@@ -64,17 +62,17 @@ class PortfolioSnapshotCreate(PortfolioSnapshotBase):
 
 
 class PortfolioSnapshotUpdate(BaseModel):
-    total_invested_value: Optional[float] = None
-    current_market_value: Optional[float] = None
-    total_profit_loss: Optional[float] = None
-    profit_loss_percentage: Optional[float] = None
+    total_invested_value: Optional[Decimal] = None
+    current_market_value: Optional[Decimal] = None
+    total_profit_loss: Optional[Decimal] = None
+    profit_loss_percentage: Optional[Decimal] = None
     risk_level: Optional[str] = None
-    value_at_risk: Optional[float] = None
-    max_drawdown: Optional[float] = None
-    volatility: Optional[float] = None
-    sharpe_ratio: Optional[float] = None
-    btc_comparison: Optional[float] = None
-    eth_comparison: Optional[float] = None
+    value_at_risk: Optional[Decimal] = None
+    max_drawdown: Optional[Decimal] = None
+    volatility: Optional[Decimal] = None
+    sharpe_ratio: Optional[Decimal] = None
+    btc_comparison: Optional[Decimal] = None
+    eth_comparison: Optional[Decimal] = None
     metrics: Optional[Dict[str, Any]] = None
 
 
@@ -94,12 +92,12 @@ class PortfolioTransactionBase(BaseModel):
     user_id: int
     asset_id: int
     transaction_type: str
-    quantity: float
-    price: float
-    total_value: float
-    fee: float = 0.0
-    realized_profit_loss: Optional[float] = None
-    profit_loss_percentage: Optional[float] = None
+    quantity: Decimal
+    price: Decimal
+    total_value: Decimal
+    fee: Decimal = Decimal("0.0")
+    realized_profit_loss: Optional[Decimal] = None
+    profit_loss_percentage: Optional[Decimal] = None
     notes: Optional[str] = None
     metadata: Dict[str, Any] = {}
     external_id: Optional[str] = None
@@ -109,8 +107,8 @@ class PortfolioTransactionBase(BaseModel):
     @field_validator("transaction_type")
     @classmethod
     def validate_transaction_type(cls, v):
-        if v not in ["buy", "sell"]:
-            raise ValueError("Transaction type must be 'buy' or 'sell'")
+        if v not in ["buy", "sell", "transfer_in", "transfer_out"]:
+            raise ValueError("Transaction type must be 'buy', 'sell', 'transfer_in', or 'transfer_out'")
         return v
 
 
@@ -119,12 +117,12 @@ class PortfolioTransactionCreate(PortfolioTransactionBase):
 
 
 class PortfolioTransactionUpdate(BaseModel):
-    quantity: Optional[float] = None
-    price: Optional[float] = None
-    total_value: Optional[float] = None
-    fee: Optional[float] = None
-    realized_profit_loss: Optional[float] = None
-    profit_loss_percentage: Optional[float] = None
+    quantity: Optional[Decimal] = None
+    price: Optional[Decimal] = None
+    total_value: Optional[Decimal] = None
+    fee: Optional[Decimal] = None
+    realized_profit_loss: Optional[Decimal] = None
+    profit_loss_percentage: Optional[Decimal] = None
     notes: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     external_id: Optional[str] = None

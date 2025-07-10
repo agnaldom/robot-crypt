@@ -181,11 +181,47 @@ class BinanceClient:
         Returns:
             Union[Dict[str, Any], List[Dict[str, Any]]]: Price data
         """
+        from src.utils.utils import normalize_symbol
+        
         params = {}
         if symbol:
-            params['symbol'] = symbol
+            try:
+                normalized_symbol = normalize_symbol(symbol)
+                if not normalized_symbol:
+                    logger.error(f"Invalid symbol after normalization: {symbol}")
+                    raise BinanceAPIException(f"Invalid symbol: {symbol}")
+                params['symbol'] = normalized_symbol
+            except ValueError as e:
+                logger.error(f"Error normalizing symbol {symbol}: {str(e)}")
+                raise BinanceAPIException(f"Invalid symbol format: {symbol}")
         
         return self._request('GET', 'ticker/price', params)
+    
+    def get_ticker_24hr(self, symbol: Optional[str] = None) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Get 24hr ticker price change statistics.
+        
+        Args:
+            symbol (str, optional): Symbol to get stats for. Defaults to None (all symbols).
+        
+        Returns:
+            Union[Dict[str, Any], List[Dict[str, Any]]]: 24hr ticker statistics
+        """
+        from src.utils.utils import normalize_symbol
+        
+        params = {}
+        if symbol:
+            try:
+                normalized_symbol = normalize_symbol(symbol)
+                if not normalized_symbol:
+                    logger.error(f"Invalid symbol after normalization: {symbol}")
+                    raise BinanceAPIException(f"Invalid symbol: {symbol}")
+                params['symbol'] = normalized_symbol
+            except ValueError as e:
+                logger.error(f"Error normalizing symbol {symbol}: {str(e)}")
+                raise BinanceAPIException(f"Invalid symbol format: {symbol}")
+        
+        return self._request('GET', 'ticker/24hr', params)
     
     def get_klines(
         self, 
@@ -208,8 +244,19 @@ class BinanceClient:
         Returns:
             List[List[Any]]: Kline data
         """
+        from src.utils.utils import normalize_symbol
+        
+        try:
+            normalized_symbol = normalize_symbol(symbol)
+            if not normalized_symbol:
+                logger.error(f"Invalid symbol after normalization: {symbol}")
+                raise BinanceAPIException(f"Invalid symbol: {symbol}")
+        except ValueError as e:
+            logger.error(f"Error normalizing symbol {symbol}: {str(e)}")
+            raise BinanceAPIException(f"Invalid symbol format: {symbol}")
+        
         params = {
-            'symbol': symbol,
+            'symbol': normalized_symbol,
             'interval': interval,
             'limit': limit
         }
@@ -258,8 +305,19 @@ class BinanceClient:
         Returns:
             Dict[str, Any]: Order response
         """
+        from src.utils.utils import normalize_symbol
+        
+        try:
+            normalized_symbol = normalize_symbol(symbol)
+            if not normalized_symbol:
+                logger.error(f"Invalid symbol after normalization: {symbol}")
+                raise BinanceAPIException(f"Invalid symbol: {symbol}")
+        except ValueError as e:
+            logger.error(f"Error normalizing symbol {symbol}: {str(e)}")
+            raise BinanceAPIException(f"Invalid symbol format: {symbol}")
+        
         params = {
-            'symbol': symbol,
+            'symbol': normalized_symbol,
             'side': side,
             'type': order_type,
             'quantity': quantity,

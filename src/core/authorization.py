@@ -13,6 +13,7 @@ from sqlalchemy.future import select
 
 from src.core.security import get_current_user
 from src.models.user import User
+from src.models.portfolio_orm import Portfolio
 from src.database.database import get_database
 
 
@@ -54,7 +55,6 @@ class ResourceOwnership:
     async def verify_portfolio_ownership(self, portfolio_id: int, user: User) -> bool:
         """Verify if user owns the portfolio."""
         try:
-            from src.models.portfolio import Portfolio
             result = await self.db.execute(
                 select(Portfolio).where(
                     Portfolio.id == portfolio_id,
@@ -151,9 +151,14 @@ class PermissionChecker:
     def check_resource_access(cls, user: User, resource_type: ResourceType, permission: Permission) -> bool:
         """Check resource-specific access rules."""
         
-        # System resources require admin permission
+        # System resources require admin role or higher
         if resource_type == ResourceType.SYSTEM:
-            return cls.has_permission(user, Permission.ADMIN, resource_type)
+            try:
+                user_role_str = getattr(user, 'role', None) or user.preferences.get('role', 'user')
+                user_role = Role(user_role_str.lower())
+                return user_role in [Role.ADMIN, Role.SUPERUSER]
+            except (ValueError, AttributeError):
+                return False
         
         # User resources - users can only access their own
         if resource_type == ResourceType.USER:

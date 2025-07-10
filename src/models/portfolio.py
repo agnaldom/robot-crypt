@@ -4,8 +4,30 @@ Portfolio data models.
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Set
+from enum import Enum
 
 from src.models.trade import OrderSide
+
+# Import SQLAlchemy models for compatibility with tests
+from src.models.portfolio_snapshot import PortfolioSnapshot
+from src.models.portfolio_asset import PortfolioAsset
+from src.models.portfolio_transaction import PortfolioTransaction
+
+
+class TransactionType(str, Enum):
+    """Transaction type enumeration."""
+    BUY = "buy"
+    SELL = "sell"
+    TRANSFER_IN = "transfer_in"
+    TRANSFER_OUT = "transfer_out"
+
+
+class RiskLevel(str, Enum):
+    """Risk level enumeration."""
+    CONSERVATIVE = "conservative"
+    MODERATE = "moderate"
+    AGGRESSIVE = "aggressive"
+    VERY_HIGH = "very_high"
 
 
 @dataclass
@@ -54,7 +76,7 @@ class AssetHolding:
 
 
 @dataclass
-class PortfolioSnapshot:
+class PortfolioSnapshotDataclass:
     """Portfolio snapshot at a specific point in time."""
     timestamp: datetime
     holdings: List[AssetHolding] = field(default_factory=list)
@@ -93,7 +115,7 @@ class PortfolioSnapshot:
 
 
 @dataclass
-class PortfolioTransaction:
+class PortfolioTransactionDataclass:
     """Portfolio transaction."""
     symbol: str
     side: OrderSide

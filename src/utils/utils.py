@@ -13,6 +13,25 @@ def format_symbol(symbol):
     Returns:
         str: Símbolo formatado corretamente (ex: 'SHIBUSDT')
     """
+    return normalize_symbol(symbol)
+
+def normalize_symbol(symbol):
+    """
+    Normaliza um símbolo removendo caracteres ilegais e formatando para a API Binance
+    
+    Args:
+        symbol (str or list): Símbolo ou lista de símbolos
+        
+    Returns:
+        str: Símbolo normalizado e limpo
+    """
+    import re
+    import urllib.parse
+    
+    # Verifica se o símbolo é None
+    if symbol is None:
+        raise ValueError("Símbolo não pode ser None")
+    
     # Se for uma lista, pega o primeiro elemento
     if isinstance(symbol, list):
         symbol = symbol[0] if symbol else ""
@@ -20,17 +39,68 @@ def format_symbol(symbol):
     # Converte para string se não for
     symbol = str(symbol)
     
+    # Remove espaços em branco no início e fim
+    symbol = symbol.strip()
+    
+    # Decodifica URL encoding se presente
+    symbol = urllib.parse.unquote(symbol)
+    
     # Remove colchetes de strings que representam listas
     symbol = symbol.replace('[', '').replace(']', '')
     
-    # Remove aspas, barras e espaços
-    symbol = symbol.replace('/', '').replace('"', '').replace("'", '').strip()
+    # Remove aspas duplas e simples
+    symbol = symbol.replace('"', '').replace("'", '')
     
-    # Remove caracteres de escape URL se presentes
+    # Remove caracteres de escape URL específicos
     symbol = symbol.replace('%22', '')  # Remove aspas URL-encoded
     symbol = symbol.replace('%27', '')  # Remove aspas simples URL-encoded
+    symbol = symbol.replace('%2F', '')  # Remove barra URL-encoded
+    symbol = symbol.replace('%5C', '')  # Remove contrabarra URL-encoded
     
-    return symbol.upper()
+    # Remove barras e caracteres especiais que podem causar problemas
+    symbol = symbol.replace('/', '').replace('\\', '')
+    
+    # Remove caracteres de controle e não-ASCII
+    symbol = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', symbol)
+    
+    # Remove caracteres especiais que podem ser problemáticos para APIs
+    # Mantém apenas letras, números e alguns caracteres seguros
+    symbol = re.sub(r'[^A-Za-z0-9]', '', symbol)
+    
+    # Converte para maiúsculas
+    symbol = symbol.upper()
+    
+    # Verifica se o símbolo resultante não está vazio
+    if not symbol:
+        raise ValueError("Símbolo inválido: resultado vazio após normalização")
+    
+    # Verifica se o símbolo tem comprimento adequado (geralmente 6-12 caracteres)
+    if len(symbol) < 3:
+        raise ValueError(f"Símbolo muito curto após normalização: {symbol}")
+    
+    if len(symbol) > 20:
+        raise ValueError(f"Símbolo muito longo após normalização: {symbol}")
+    
+    return symbol
+
+def sanitize_symbol(symbol):
+    """
+    Sanitiza um símbolo para uso seguro em URLs e APIs
+    
+    Args:
+        symbol (str): Símbolo para sanitizar
+        
+    Returns:
+        str: Símbolo sanitizado
+    """
+    try:
+        return normalize_symbol(symbol)
+    except ValueError as e:
+        # Em caso de erro, registra o problema e retorna None
+        import logging
+        logger = logging.getLogger("robot-crypt")
+        logger.error(f"Erro ao sanitizar símbolo '{symbol}': {str(e)}")
+        return None
 import os
 import logging
 import random

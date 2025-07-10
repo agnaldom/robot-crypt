@@ -235,7 +235,23 @@ class BinanceAPI:
     def get_ticker_price(self, symbol):
         """Obtém preço atual de um par"""
         endpoint = "/v3/ticker/price"
-        formatted_symbol = format_symbol(symbol)
+        
+        # Validação e normalização do símbolo
+        try:
+            formatted_symbol = format_symbol(symbol)
+            if not formatted_symbol:
+                self._log_structured("error", 
+                    f"Símbolo inválido após normalização: {symbol}", 
+                    {"original_symbol": symbol}
+                )
+                return None
+        except ValueError as e:
+            self._log_structured("error", 
+                f"Erro ao normalizar símbolo {symbol}: {str(e)}", 
+                {"original_symbol": symbol, "error": str(e)}
+            )
+            return None
+        
         params = {'symbol': formatted_symbol}
         
         try:
@@ -261,7 +277,23 @@ class BinanceAPI:
     def get_klines(self, symbol, interval, limit=500):
         """Obtém dados de candlestick (OHLCV)"""
         endpoint = "/v3/klines"
-        formatted_symbol = format_symbol(symbol)
+        
+        # Validação e normalização do símbolo
+        try:
+            formatted_symbol = format_symbol(symbol)
+            if not formatted_symbol:
+                self._log_structured("error", 
+                    f"Símbolo inválido após normalização: {symbol}", 
+                    {"original_symbol": symbol}
+                )
+                return []
+        except ValueError as e:
+            self._log_structured("error", 
+                f"Erro ao normalizar símbolo {symbol}: {str(e)}", 
+                {"original_symbol": symbol, "error": str(e)}
+            )
+            return []
+        
         params = {
             'symbol': formatted_symbol,
             'interval': interval,
@@ -349,8 +381,17 @@ class BinanceAPI:
         
         endpoint = "/v3/order"
         
-        # Converte o símbolo para o formato da Binance
-        symbol = format_symbol(symbol)
+        # Validação e normalização do símbolo
+        try:
+            symbol = format_symbol(symbol)
+            if not symbol:
+                error_msg = f"Símbolo inválido após normalização"
+                self._log_structured("error", error_msg, {"original_symbol": symbol})
+                raise ValueError(error_msg)
+        except ValueError as e:
+            error_msg = f"Erro ao normalizar símbolo: {str(e)}"
+            self._log_structured("error", error_msg, {"original_symbol": symbol, "error": str(e)})
+            raise ValueError(error_msg)
         
         params = {
             'symbol': symbol,
@@ -438,8 +479,21 @@ class BinanceAPI:
     def get_order(self, symbol, order_id):
         """Obtém informações sobre uma ordem específica"""
         endpoint = "/v3/order"
+        
+        # Validação e normalização do símbolo
+        try:
+            formatted_symbol = format_symbol(symbol)
+            if not formatted_symbol:
+                error_msg = f"Símbolo inválido após normalização: {symbol}"
+                self._log_structured("error", error_msg, {"original_symbol": symbol})
+                raise ValueError(error_msg)
+        except ValueError as e:
+            error_msg = f"Erro ao normalizar símbolo {symbol}: {str(e)}"
+            self._log_structured("error", error_msg, {"original_symbol": symbol, "error": str(e)})
+            raise ValueError(error_msg)
+        
         params = {
-            'symbol': format_symbol(symbol),
+            'symbol': formatted_symbol,
             'orderId': order_id
         }
         return self._make_request('GET', endpoint, params, signed=True)
@@ -447,8 +501,21 @@ class BinanceAPI:
     def cancel_order(self, symbol, order_id):
         """Cancela uma ordem específica"""
         endpoint = "/v3/order"
+        
+        # Validação e normalização do símbolo
+        try:
+            formatted_symbol = format_symbol(symbol)
+            if not formatted_symbol:
+                error_msg = f"Símbolo inválido após normalização: {symbol}"
+                self._log_structured("error", error_msg, {"original_symbol": symbol})
+                raise ValueError(error_msg)
+        except ValueError as e:
+            error_msg = f"Erro ao normalizar símbolo {symbol}: {str(e)}"
+            self._log_structured("error", error_msg, {"original_symbol": symbol, "error": str(e)})
+            raise ValueError(error_msg)
+        
         params = {
-            'symbol': format_symbol(symbol),
+            'symbol': formatted_symbol,
             'orderId': order_id
         }
         return self._make_request('DELETE', endpoint, params, signed=True)
@@ -476,8 +543,25 @@ class BinanceAPI:
         """Obtém estatísticas de 24h para um símbolo ou todos os símbolos"""
         endpoint = "/v3/ticker/24hr"
         params = {}
+        
         if symbol:
-            params['symbol'] = format_symbol(symbol)
+            # Validação e normalização do símbolo
+            try:
+                formatted_symbol = format_symbol(symbol)
+                if not formatted_symbol:
+                    self._log_structured("error", 
+                        f"Símbolo inválido após normalização: {symbol}", 
+                        {"original_symbol": symbol}
+                    )
+                    return None
+                params['symbol'] = formatted_symbol
+            except ValueError as e:
+                self._log_structured("error", 
+                    f"Erro ao normalizar símbolo {symbol}: {str(e)}", 
+                    {"original_symbol": symbol, "error": str(e)}
+                )
+                return None
+                
         return self._make_request('GET', endpoint, params)
     
     def test_connection(self):

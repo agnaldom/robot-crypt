@@ -32,6 +32,9 @@ from src import (
     TelegramNotifier, DBManager, PostgresManager,
     ExternalDataAnalyzer, AdaptiveRiskManager, WalletManager
 )
+
+# Importa sistema de cache histórico
+from src.cache import initialize_historical_cache, get_cache_status
 # Dashboard será implementado como um projeto separado
 # from dashboard import RobotCryptDashboard
 
@@ -293,6 +296,55 @@ def initialize_resources():
             return None, None, None, None
 
     logger.info("Inicialização concluída com sucesso")
+    
+    # Inicializa cache de dados históricos
+    try:
+        logger.info("🔄 Inicializando cache de dados históricos...")
+        
+        # Define símbolos para cache baseado nos pares de trading
+        cache_symbols = None
+        if hasattr(config, 'trading_pairs') and config.trading_pairs:
+            # Converte pares para formato Binance (ex: BTC/USDT -> BTCUSDT)
+            cache_symbols = [pair.replace('/', '') for pair in config.trading_pairs]
+        
+        # Executa inicialização do cache de forma assíncrona
+        import asyncio
+        
+        # Cria um loop de eventos se não existir
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Inicializa o cache
+        cache_success = loop.run_until_complete(
+            initialize_historical_cache(cache_symbols)
+        )
+        
+        if cache_success:
+            # Mostra status do cache
+            cache_status = get_cache_status()
+            logger.info(f"✅ Cache histórico inicializado com sucesso!")
+            logger.info(f"📊 Símbolos em cache: {cache_status['cached_symbols']}")
+            logger.info(f"📈 Cobertura de dados: {cache_status['data_coverage_days']} dias")
+            logger.info(f"🎯 Taxa de cobertura: {cache_status['coverage_percentage']:.1f}%")
+            
+            # Notifica via Telegram se configurado
+            if notifier:
+                notifier.notify_status(
+                    f"📊 Cache histórico inicializado!\n"
+                    f"🎯 {cache_status['cached_symbols']} símbolos em cache\n"
+                    f"📈 {cache_status['data_coverage_days']} dias de dados"
+                )
+        else:
+            logger.warning("⚠️ Falha ao inicializar cache histórico - continuando sem cache")
+            if notifier:
+                notifier.notify_status("⚠️ Cache histórico não pôde ser inicializado")
+                
+    except Exception as cache_error:
+        logger.error(f"Erro ao inicializar cache histórico: {str(cache_error)}")
+        logger.info("Continuando sem cache histórico...")
     
     # Pausa para garantir que o container esteja estável
     logger.info("Aguardando 10 segundos antes de iniciar operações...")
