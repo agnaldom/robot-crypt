@@ -1,0 +1,28 @@
+Data: 2025-07-10 10:16:51
+Mensagem: 🔍 ANÁLISE DE BNB/BTC (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 3.00s às 10/07/2025 10:16:50
+
+🔔 SINAIS DETECTADOS
+🟢 Sinal 1: BUY (confiança: 80.00%)
+   🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜
+   📝 Razão: Padrão Breakout High detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: BUY (conf: 80.00%) - 2 sinais
+⚠️ Divergência: Tradicional(None) vs IA(buy)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere BUY (conf: 80.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: BNB/BTC | TF: 15m | Duração: 3.00s
+📊 Sistema: IA + Análise Tradicional

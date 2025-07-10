@@ -1,0 +1,28 @@
+Data: 2025-07-10 10:16:56
+Mensagem: 🔍 ANÁLISE DE BNB/BRL (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 3.60s às 10/07/2025 10:16:55
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 70.00%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: EMA 9 cruzou abaixo da EMA 21
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 70.00%) - 3 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.25)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 70.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: BNB/BRL | TF: 15m | Duração: 3.60s
+📊 Sistema: IA + Análise Tradicional
