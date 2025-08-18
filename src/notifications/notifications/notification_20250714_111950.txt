@@ -1,0 +1,28 @@
+Data: 2025-07-14 11:19:50
+Mensagem: 🔍 ANÁLISE DE ETH/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.72s às 14/07/2025 11:19:49
+
+🔔 SINAIS DETECTADOS
+🟢 Sinal 1: BUY (confiança: 70.00%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: EMA 9 cruzou acima da EMA 21
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: BUY (conf: 70.00%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(buy)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere BUY (conf: 70.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: ETH/USDT | TF: 15m | Duração: 2.72s
+📊 Sistema: IA + Análise Tradicional

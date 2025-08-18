@@ -32,10 +32,34 @@ class TestEnhancedTradingStrategyErrors:
         # Mock das configurações necessárias
         self.mock_config.scalping = {'risk_per_trade': 0.02}
         
-        # Patches para evitar inicialização de componentes reais
-        with patch('src.strategies.enhanced_strategy.get_llm_client'):
-            with patch('src.strategies.enhanced_strategy.NewsIntegrator'):
-                self.strategy = EnhancedTradingStrategy(self.mock_config, self.mock_binance_api)
+        # Patches permanentes para os testes
+        self.patcher_llm = patch('src.ai.llm_client.get_llm_client')
+        self.patcher_news_integrator = patch('src.ai.news_integrator.NewsIntegrator')
+        self.patcher_news_analyzer = patch('src.strategies.enhanced_strategy.LLMNewsAnalyzer')
+        self.patcher_price_predictor = patch('src.strategies.enhanced_strategy.HybridPricePredictor')
+        self.patcher_pattern_detector = patch('src.strategies.enhanced_strategy.AdvancedPatternDetector')
+        self.patcher_symbol_analyzer = patch('src.strategies.enhanced_strategy.SymbolAnalyzer')
+        
+        # Inicia os patches
+        self.patcher_llm.start()
+        self.patcher_news_integrator.start()
+        self.patcher_news_analyzer.start()
+        self.patcher_price_predictor.start()
+        self.patcher_pattern_detector.start()
+        self.patcher_symbol_analyzer.start()
+        
+        # Cria a estratégia com mocks
+        self.strategy = EnhancedTradingStrategy(self.mock_config, self.mock_binance_api)
+    
+    def teardown_method(self):
+        """Cleanup após cada teste"""
+        # Para todos os patches
+        self.patcher_llm.stop()
+        self.patcher_news_integrator.stop()
+        self.patcher_news_analyzer.stop()
+        self.patcher_price_predictor.stop()
+        self.patcher_pattern_detector.stop()
+        self.patcher_symbol_analyzer.stop()
     
     def test_combine_traditional_and_ai_analysis_handles_empty_signals(self):
         """Testa se _combine_traditional_and_ai_analysis trata lista vazia de sinais (Erro 5)"""
@@ -351,11 +375,37 @@ class TestEnhancedScalpingStrategyErrors:
         # Mock das configurações necessárias
         self.mock_config.scalping = {'risk_per_trade': 0.02}
         
-        # Patches para evitar inicialização de componentes reais
-        with patch('src.strategies.enhanced_strategy.get_llm_client'):
-            with patch('src.strategies.enhanced_strategy.NewsIntegrator'):
-                with patch('src.strategies.strategy.ScalpingStrategy.__init__'):
-                    self.strategy = EnhancedScalpingStrategy(self.mock_config, self.mock_binance_api)
+        # Patches permanentes para os testes
+        self.patcher_llm = patch('src.ai.llm_client.get_llm_client')
+        self.patcher_news_integrator = patch('src.ai.news_integrator.NewsIntegrator')
+        self.patcher_news_analyzer = patch('src.strategies.enhanced_strategy.LLMNewsAnalyzer')
+        self.patcher_price_predictor = patch('src.strategies.enhanced_strategy.HybridPricePredictor')
+        self.patcher_pattern_detector = patch('src.strategies.enhanced_strategy.AdvancedPatternDetector')
+        self.patcher_symbol_analyzer = patch('src.strategies.enhanced_strategy.SymbolAnalyzer')
+        self.patcher_scalping_init = patch('src.strategies.strategy.ScalpingStrategy.__init__')
+        
+        # Inicia os patches
+        self.patcher_llm.start()
+        self.patcher_news_integrator.start()
+        self.patcher_news_analyzer.start()
+        self.patcher_price_predictor.start()
+        self.patcher_pattern_detector.start()
+        self.patcher_symbol_analyzer.start()
+        self.patcher_scalping_init.start()
+        
+        # Cria a estratégia com mocks
+        self.strategy = EnhancedScalpingStrategy(self.mock_config, self.mock_binance_api)
+    
+    def teardown_method(self):
+        """Cleanup após cada teste"""
+        # Para todos os patches
+        self.patcher_llm.stop()
+        self.patcher_news_integrator.stop()
+        self.patcher_news_analyzer.stop()
+        self.patcher_price_predictor.stop()
+        self.patcher_pattern_detector.stop()
+        self.patcher_symbol_analyzer.stop()
+        self.patcher_scalping_init.stop()
     
     def test_analyze_market_with_disabled_ai(self):
         """Testa se analyze_market funciona com IA desabilitada"""

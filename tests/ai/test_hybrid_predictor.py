@@ -223,7 +223,13 @@ class TestHybridPricePredictor:
         
         # Verify prompt doesn't include news section
         call_args = mock_llm_client.analyze_json.call_args
-        prompt = call_args[0][0]
+        # Check if prompt is in kwargs or args
+        if call_args and len(call_args) > 1 and 'prompt' in call_args[1]:
+            prompt = call_args[1]['prompt']
+        elif call_args and len(call_args[0]) > 0:
+            prompt = call_args[0][0]
+        else:
+            prompt = ""  # Fallback
         assert "technical" in prompt.lower()
         # Should handle missing news gracefully
     
@@ -405,13 +411,19 @@ class TestHybridPricePredictor:
             news_data=news_data
         )
         
-        assert result["direction"] == "buy"  # Mock always returns buy
+        assert result["direction"] == "bullish"  # Should match mock response
         assert result["confidence"] == 0.82
         assert "support" in result["reasoning"].lower()
         
         # Verify historical data was included in prompt
         call_args = mock_llm_client.analyze_json.call_args
-        prompt = call_args[0][0]
+        # Check if prompt is in kwargs or args
+        if call_args and len(call_args) > 1 and 'prompt' in call_args[1]:
+            prompt = call_args[1]['prompt']
+        elif call_args and len(call_args[0]) > 0:
+            prompt = call_args[0][0]
+        else:
+            prompt = ""  # Fallback
         assert "40000.0" in prompt  # SMA 200 (historical context)
         assert "support" in prompt.lower()
     
@@ -419,9 +431,9 @@ class TestHybridPricePredictor:
     async def test_predict_with_multiple_timeframes(self):
         """Test prediction considering multiple timeframes"""
         mock_prediction_response = {
-            "direction": "bullish",
+            "expected_direction": "bullish",
             "confidence": 0.78,
-            "strategy": "Multi-timeframe BUY signal",
+            "recommended_strategy": "Multi-timeframe BUY signal",
             "reasoning": "Bullish alignment across multiple timeframes",
             "target_price": 47000.0,
             "stop_loss": 41500.0,
@@ -452,14 +464,20 @@ class TestHybridPricePredictor:
             news_data="Multi-timeframe analysis shows bullish setup"
         )
         
-        assert result["direction"] == "buy"  # Mock always returns buy
+        assert result["direction"] == "bullish"  # Should match mock response
         assert result["confidence"] == 0.78
         assert "Multi-timeframe" in result["strategy"]
         assert "alignment" in result["reasoning"].lower()
         
         # Verify multiple timeframes were considered
         call_args = mock_llm_client.analyze_json.call_args
-        prompt = call_args[0][0]
+        # Check if prompt is in kwargs or args
+        if call_args and len(call_args) > 1 and 'prompt' in call_args[1]:
+            prompt = call_args[1]['prompt']
+        elif call_args and len(call_args[0]) > 0:
+            prompt = call_args[0][0]
+        else:
+            prompt = ""  # Fallback
         assert "rsi_1h" in prompt
         assert "rsi_4h" in prompt
         assert "rsi_1d" in prompt

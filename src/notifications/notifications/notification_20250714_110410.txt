@@ -1,0 +1,28 @@
+Data: 2025-07-14 11:04:10
+Mensagem: 🔍 ANÁLISE DE FLOKI/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.82s às 14/07/2025 11:04:10
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 78.38%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Múltiplos sinais: MACD cruzou abaixo da linha de sinal; EMA 9 cruzou abaixo da EMA 21; Pico de volume detectado com tendência down; Padrão Breakdown Low detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 78.38%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 78.4%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: FLOKI/USDT | TF: 15m | Duração: 2.82s
+📊 Sistema: IA + Análise Tradicional

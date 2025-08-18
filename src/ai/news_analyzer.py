@@ -108,6 +108,8 @@ class LLMNewsAnalyzer:
             news_text = f"{i}. {item.title[:150]}"  # Limita título
             if item.content:
                 news_text += f" - {item.content[:200]}"  # Limita conteúdo
+            if item.source:
+                news_text += f" ({item.source})"
             news_texts.append(news_text)
         
         full_text = "\n".join(news_texts)
@@ -131,6 +133,17 @@ class LLMNewsAnalyzer:
         try:
             if not news_items:
                 return self._create_neutral_analysis(0, "No news items provided")
+            
+            # Filter news by symbol if specified
+            if symbol:
+                filtered_news = [
+                    item for item in news_items 
+                    if symbol.upper() in item.title.upper() or 
+                       symbol.upper() in (item.content or "").upper() or
+                       symbol in item.symbols_mentioned
+                ]
+                if filtered_news:
+                    news_items = filtered_news
             
             # Check cache first
             cache_key = self._generate_cache_key(news_items, symbol)
@@ -487,6 +500,54 @@ class LLMNewsAnalyzer:
             base_prompt += f"\n\nPay special attention to news directly related to {symbol} and its ecosystem."
         
         return base_prompt
+
+    def _filter_news_by_timeframe(self, news_items: List[CryptoNewsItem], hours: int) -> List[CryptoNewsItem]:
+        """Filters news items to include only those within the last given hours"""
+        cutoff = datetime.now() - timedelta(hours=hours)
+        return [item for item in news_items if item.published_at >= cutoff]
+
+    def _parse_llm_response(self, llm_response: Dict[str, Any]) -> NewsAnalysis:
+        """Parses and validates the LLM response, converting to NewsAnalysis"""
+        sentiment_score = max(-1.0, min(1.0, llm_response.get("sentiment_score", 0.0)))
+        
+        # Validate sentiment label
+        valid_sentiment_labels = ["bearish", "neutral", "bullish"]
+        sentiment_label = llm_response.get("sentiment_label", "neutral")
+        if sentiment_label not in valid_sentiment_labels:
+            sentiment_label = "neutral"
+        
+        confidence = max(0.0, min(1.0, llm_response.get("confidence", 0.5)))
+        
+        # Validate impact level
+        valid_impact_levels = ["low", "medium", "high"]
+        impact_level = llm_response.get("impact_level", "medium")
+        if impact_level not in valid_impact_levels:
+            impact_level = "medium"
+        
+        key_events = llm_response.get("key_events", [])
+        if not isinstance(key_events, list):
+            key_events = []
+        
+        reasoning = llm_response.get("reasoning", "No reasoning provided")
+        if not isinstance(reasoning, str) or reasoning is None:
+            reasoning = "No reasoning provided"
+
+        return NewsAnalysis(
+            sentiment_score=sentiment_score,
+            sentiment_label=sentiment_label,
+            confidence=confidence,
+            impact_level=impact_level,
+            key_events=key_events,
+            price_prediction=llm_response.get("price_prediction", "neutral"),
+            reasoning=reasoning,
+            article_count=0,  # Assume this is populated elsewhere
+            timestamp=datetime.now()
+        )
+
+    def _validate_news_items(self, news_items: List[CryptoNewsItem]):
+        """Validates the news items input"""
+        if not all(isinstance(item, CryptoNewsItem) for item in news_items):
+            raise ValueError("All items must be of type CryptoNewsItem")
     
     def _get_analysis_schema(self) -> Dict[str, Any]:
         """Retorna schema esperado para análise"""

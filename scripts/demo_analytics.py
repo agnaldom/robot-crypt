@@ -12,16 +12,17 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # Adicionar o diretório src ao path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from analytics import (
+from src.analytics import (
     AdvancedAnalytics,
     MLModels,
     BacktestingEngine,
     RiskAnalytics,
     ReportGenerator
 )
-from analytics.backtesting_engine import simple_ma_strategy, rsi_strategy
+from src.analytics.backtesting_engine import simple_ma_strategy, rsi_strategy
 
 
 def generate_sample_data(days=365, symbol="BTCUSDT"):

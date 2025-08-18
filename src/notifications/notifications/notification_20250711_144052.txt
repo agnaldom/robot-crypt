@@ -1,0 +1,28 @@
+Data: 2025-07-11 14:40:52
+Mensagem: 🔍 ANÁLISE DE [BNB/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.53s às 11/07/2025 14:40:51
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 74.25%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Múltiplos sinais: Tendência fortemente bearish (força: -0.80); Padrão Breakdown Low detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 74.25%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 74.3%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: [BNB/USDT | TF: 15m | Duração: 2.53s
+📊 Sistema: IA + Análise Tradicional

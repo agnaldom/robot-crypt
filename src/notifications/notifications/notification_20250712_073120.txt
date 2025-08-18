@@ -1,0 +1,32 @@
+Data: 2025-07-12 07:31:20
+Mensagem: 📈 ANÁLISE DE BTC/USDT (15m) CONCLUÍDA - 2 sinais encontrados
+⏱️ Executada em 3.20s às 12/07/2025 07:31:19
+
+🔔 SINAIS DETECTADOS
+🟢 Sinal 1: BUY (confiança: 74.25%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Múltiplos sinais: Volume crescente detectado - possível movimento de alta; Padrão Breakout High detectado
+
+🔴 Sinal 2: SELL (confiança: 70.00%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Padrão Shooting Star detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: BUY (conf: 74.25%) - 3 sinais
+⚠️ Divergência: Tradicional(None) vs IA(buy)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere BUY (conf: 74.3%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: BTC/USDT | TF: 15m | Duração: 3.20s
+📊 Sistema: IA + Análise Tradicional

@@ -1,0 +1,28 @@
+Data: 2025-07-12 09:53:31
+Mensagem: 🔍 ANÁLISE DE SHIB/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.66s às 12/07/2025 09:53:30
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 80.00%)
+   🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜
+   📝 Razão: Padrão Breakdown Low detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+✅ Tradicional: BUY
+🤖 IA: SELL (conf: 80.00%) - 2 sinais
+⚠️ Divergência: Tradicional(buy) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: Conflito entre análises: tradicional (BUY) vs IA (SELL) - Confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: SHIB/USDT | TF: 15m | Duração: 2.66s
+📊 Sistema: IA + Análise Tradicional

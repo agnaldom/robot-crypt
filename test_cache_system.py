@@ -13,6 +13,8 @@ Autor: Robot-Crypt Team
 Data: 2024
 """
 
+import pytest
+
 import asyncio
 import time
 import sys
@@ -47,6 +49,7 @@ print("🚀 TESTE DO SISTEMA DE CACHE HISTÓRICO")
 print("="*60)
 
 
+@pytest.mark.asyncio
 async def test_cache_initialization():
     """Testa a inicialização do cache."""
     print("\n📊 TESTE 1: Inicialização do Cache")
@@ -70,10 +73,10 @@ async def test_cache_initialization():
         print(f"🎯 Cobertura: {status['coverage_percentage']:.1f}%")
         print(f"📊 Dias de dados: {status['data_coverage_days']}")
         
-        return True
+        assert True
     else:
         print("❌ Falha ao inicializar cache")
-        return False
+        assert False
 
 
 def test_cache_priority():
@@ -108,16 +111,16 @@ def test_cache_priority():
             # Verifica se os dados são consistentes
             if len(data1) == len(data2):
                 print("✅ Dados consistentes entre cache e API")
-                return True
+                assert True
             else:
                 print("⚠️ Dados inconsistentes")
-                return False
+                assert False
         else:
             print("❌ Segunda busca falhou")
-            return False
+            assert False
     else:
         print("❌ Primeira busca falhou")
-        return False
+        assert False
 
 
 def test_convenience_functions():
@@ -134,7 +137,7 @@ def test_convenience_functions():
         print(f"✅ Preço atual: ${price:.2f}")
     else:
         print("❌ Falha ao obter preço")
-        return False
+        assert False
     
     # Testa faixa de preços
     print(f"📊 Buscando faixa de preços de {symbol} (30 dias)...")
@@ -145,7 +148,7 @@ def test_convenience_functions():
         print(f"📊 {price_range['count']} pontos de dados")
     else:
         print("❌ Falha ao obter faixa de preços")
-        return False
+        assert False
     
     # Testa dados históricos com diferentes períodos
     print(f"📈 Testando diferentes períodos para {symbol}...")
@@ -157,8 +160,6 @@ def test_convenience_functions():
             print(f"✅ {period}: {len(data)} registros")
         else:
             print(f"❌ {period}: falha")
-    
-    return True
 
 
 def test_multiple_symbols():
@@ -184,7 +185,7 @@ def test_multiple_symbols():
             print(f"❌ {symbol}: falha")
     
     print(f"📈 Resultado: {successful} sucessos, {failed} falhas")
-    return successful > failed
+    assert successful > failed
 
 
 def test_cache_health():
@@ -208,10 +209,9 @@ def test_cache_health():
     print(f"   Eficiência: {status['cache_efficiency']}")
     print(f"   Status: {status['status']}")
     print(f"   Última atualização: {status.get('last_update', 'N/A')}")
-    
-    return True
 
 
+@pytest.mark.asyncio
 async def test_cache_maintenance():
     """Testa manutenção do cache."""
     print("\n🔧 TESTE 6: Manutenção do Cache")
@@ -227,11 +227,11 @@ async def test_cache_maintenance():
         healthy = is_cache_healthy()
         print(f"🏥 Saúde pós-manutenção: {'OK' if healthy else 'PROBLEMAS'}")
         
-        return True
+        assert True
         
     except Exception as e:
         print(f"❌ Erro na manutenção: {str(e)}")
-        return False
+        assert False
 
 
 def test_performance_comparison():
@@ -271,10 +271,10 @@ def test_performance_comparison():
         print(f"   Cache hits: {stats['cache_hits']}")
         print(f"   Taxa de acerto: {stats['hit_rate']:.1f}%")
         
-        return True
+        assert True
     else:
         print("❌ Todas as requisições falharam")
-        return False
+        assert False
 
 
 async def run_comprehensive_test():

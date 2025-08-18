@@ -1,0 +1,28 @@
+Data: 2025-07-12 11:28:26
+Mensagem: 🔍 ANÁLISE DE FLOKI/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.49s às 12/07/2025 11:28:25
+
+🔔 SINAIS DETECTADOS
+🟢 Sinal 1: BUY (confiança: 80.00%)
+   🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜
+   📝 Razão: Padrão Breakout High detectado
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: BUY (conf: 80.00%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(buy)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟡 Nível: MEDIUM (score: 0.50)
+   🟥🟥🟥🟥🟥⬜⬜⬜⬜⬜
+📋 Recomendações: Risco médio - usar stop-loss e take-profit
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere BUY (conf: 80.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: FLOKI/USDT | TF: 15m | Duração: 2.49s
+📊 Sistema: IA + Análise Tradicional

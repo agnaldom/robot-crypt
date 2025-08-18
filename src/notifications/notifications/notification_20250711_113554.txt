@@ -1,0 +1,28 @@
+Data: 2025-07-11 11:35:54
+Mensagem: 🔍 ANÁLISE DE BNB/BRL (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.02s às 11/07/2025 11:35:54
+
+🔔 SINAIS DETECTADOS
+🟢 Sinal 1: BUY (confiança: 68.75%)
+   🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜
+   📝 Razão: Múltiplos sinais: MACD cruzou acima da linha de sinal; Volume crescente detectado - possível movimento de alta
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: BUY (conf: 68.75%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(buy)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere BUY (conf: 68.8%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: BNB/BRL | TF: 15m | Duração: 2.02s
+📊 Sistema: IA + Análise Tradicional

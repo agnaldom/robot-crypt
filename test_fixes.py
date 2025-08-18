@@ -2,6 +2,7 @@
 """
 Test script to verify the fixes for the robot-crypt errors
 """
+import pytest
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -17,12 +18,13 @@ from src.ai.news_analyzer import NewsAnalysis
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@pytest.mark.asyncio
 async def test_telegram_notifier():
     """Test the telegram notifier with None analysis data"""
     print("Testing Telegram Notifier...")
     
     # Create a notifier instance (won't send messages without token)
-    notifier = TelegramNotifier(token="dummy_token")
+    notifier = TelegramNotifier("dummy_token", "dummy_chat_id")
     
     # Test with None analysis data - should not crash
     try:
@@ -76,6 +78,7 @@ async def test_telegram_notifier():
     except Exception as e:
         print(f"✗ Telegram notifier failed with valid data: {e}")
 
+@pytest.mark.asyncio
 async def test_news_integrator():
     """Test the news integrator timeout handling"""
     print("\nTesting News Integrator...")

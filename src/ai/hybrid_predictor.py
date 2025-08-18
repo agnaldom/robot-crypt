@@ -123,12 +123,21 @@ class HybridPricePredictor:
         strategy = llm_result.get("recommended_strategy", "hold")
         reasoning = llm_result.get("reasoning", "Default reasoning")
         
-        return {
+        # Create base result
+        result = {
             "direction": direction,
             "confidence": confidence,
             "strategy": strategy,
             "reasoning": reasoning
         }
+        
+        # Include additional fields from LLM response if they exist
+        additional_fields = ["target_price", "stop_loss", "time_horizon", "risk_assessment"]
+        for field in additional_fields:
+            if field in llm_result:
+                result[field] = llm_result[field]
+        
+        return result
 
 
 # Example use case

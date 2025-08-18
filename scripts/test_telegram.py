@@ -1,3 +1,13 @@
+import pytest
+
+@pytest.fixture
+def bot_token():
+    return "fake_token_for_testing"
+
+@pytest.fixture
+def chat_id():
+    return "fake_chat_id_for_testing"
+
 #!/usr/bin/env python3
 """
 Script completo para testar configurações do Telegram do robot-crypt
@@ -76,6 +86,7 @@ def test_basic_connectivity(bot_token):
         print(f"❌ Erro de conectividade: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_telegram_notifier(bot_token, chat_id):
     """Testa o TelegramNotifier diretamente"""
     try:
@@ -101,6 +112,7 @@ async def test_telegram_notifier(bot_token, chat_id):
         print(f"❌ Erro no TelegramNotifier: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_telegram_service():
     """Testa o TelegramService"""
     try:
@@ -130,6 +142,7 @@ async def test_telegram_service():
         print(f"❌ Erro no TelegramService: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_trade_notification():
     """Testa notificação de trade"""
     try:
@@ -167,6 +180,7 @@ async def test_trade_notification():
         print(f"❌ Erro na notificação de trade: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_error_alert():
     """Testa alerta de erro"""
     try:
@@ -192,6 +206,7 @@ async def test_error_alert():
         print(f"❌ Erro no alerta de erro: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_market_alert():
     """Testa alerta de mercado"""
     try:
@@ -230,6 +245,7 @@ async def test_market_alert():
         print(f"❌ Erro no alerta de mercado: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_system_status():
     """Testa notificação de status do sistema"""
     try:
@@ -263,6 +279,7 @@ async def test_system_status():
         print(f"❌ Erro no status do sistema: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_performance_summary():
     """Testa resumo de performance"""
     try:
@@ -297,6 +314,7 @@ async def test_performance_summary():
         print(f"❌ Erro no resumo de performance: {e}")
         return False
 
+@pytest.mark.asyncio
 async def test_analysis_report():
     """Testa relatório de análise"""
     try:

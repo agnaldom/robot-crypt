@@ -1,0 +1,28 @@
+Data: 2025-07-14 10:32:20
+Mensagem: 🔍 ANÁLISE DE DOGE/USDT (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 3.51s às 14/07/2025 10:32:19
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 70.00%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: MACD cruzou abaixo da linha de sinal
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 70.00%) - 2 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 70.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: DOGE/USDT | TF: 15m | Duração: 3.51s
+📊 Sistema: IA + Análise Tradicional

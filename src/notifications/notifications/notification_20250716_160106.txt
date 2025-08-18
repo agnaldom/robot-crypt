@@ -1,0 +1,28 @@
+Data: 2025-07-16 16:01:06
+Mensagem: 🔍 ANÁLISE DE BNB/BTC (15m) CONCLUÍDA - 1 sinais encontrados
+⏱️ Executada em 2.80s às 16/07/2025 16:01:05
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 68.75%)
+   🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜
+   📝 Razão: Múltiplos sinais: EMA 9 cruzou abaixo da EMA 21; Tendência fortemente bearish (força: -0.77)
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 68.75%) - 1 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 68.8%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: BNB/BTC | TF: 15m | Duração: 2.80s
+📊 Sistema: IA + Análise Tradicional

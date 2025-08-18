@@ -1,0 +1,32 @@
+Data: 2025-07-14 09:59:43
+Mensagem: 📈 ANÁLISE DE XRP/USDT] (15m) CONCLUÍDA - 2 sinais encontrados
+⏱️ Executada em 3.55s às 14/07/2025 09:59:42
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 71.50%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Múltiplos sinais: MACD cruzou abaixo da linha de sinal; EMA 9 cruzou abaixo da EMA 21; Tendência fortemente bearish (força: -0.79)
+
+🟢 Sinal 2: BUY (confiança: 65.00%)
+   🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜
+   📝 Razão: Preço abaixo da banda inferior de Bollinger
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 71.50%) - 2 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.20)
+   🟥🟥⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 71.5%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: XRP/USDT] | TF: 15m | Duração: 3.55s
+📊 Sistema: IA + Análise Tradicional

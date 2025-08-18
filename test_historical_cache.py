@@ -15,6 +15,8 @@ Uso:
     python test_historical_cache.py
 """
 
+import pytest
+
 import sys
 import asyncio
 import time
@@ -73,6 +75,7 @@ class TestResults:
         print("="*60)
 
 
+@pytest.mark.asyncio
 async def test_cache_initialization():
     """Testa inicialização do cache."""
     print("\n🧪 Teste 1: Inicialização do Cache")
@@ -95,7 +98,6 @@ async def test_cache_initialization():
         results.add_result("Inicialização do cache", False, f"Erro: {str(e)}")
     
     results.print_summary()
-    return results
 
 
 def test_data_retrieval():
@@ -128,7 +130,6 @@ def test_data_retrieval():
         results.add_result("Busca de dados", False, f"Erro: {str(e)}")
     
     results.print_summary()
-    return results
 
 
 def test_cache_performance():
@@ -166,7 +167,6 @@ def test_cache_performance():
         results.add_result("Teste de performance", False, f"Erro: {str(e)}")
     
     results.print_summary()
-    return results
 
 
 def test_strategy_integration():
@@ -214,7 +214,6 @@ def test_strategy_integration():
         results.add_result("Integração com estratégias", False, f"Erro: {str(e)}")
     
     results.print_summary()
-    return results
 
 
 def test_error_handling():
@@ -242,7 +241,6 @@ def test_error_handling():
         results.add_result("Tratamento de erros", False, f"Erro não tratado: {str(e)}")
     
     results.print_summary()
-    return results
 
 
 async def run_all_tests():

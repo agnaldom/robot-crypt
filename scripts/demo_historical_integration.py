@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 # Adiciona src ao path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / 'src'))
 
 from src.analysis.historical_comparator import HistoricalComparator, compare_symbol_with_history
 from src.integrations.historical_trading_integration import HistoricalTradingIntegration

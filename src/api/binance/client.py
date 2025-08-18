@@ -288,6 +288,7 @@ class BinanceClient:
         quantity: float,
         price: Optional[float] = None,
         time_in_force: str = 'GTC',
+        retry: bool = True,  # Retry logic for slow API
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -316,6 +317,29 @@ class BinanceClient:
             logger.error(f"Error normalizing symbol {symbol}: {str(e)}")
             raise BinanceAPIException(f"Invalid symbol format: {symbol}")
         
+        # Validate order limits
+        from decimal import Decimal
+        from src.trading.order_validator import OrderValidator
+        validator = OrderValidator(self)
+        validation_result = validator.validate_order(
+            symbol=normalized_symbol,
+            side=side,
+            order_type=order_type,
+            quantity=Decimal(quantity),
+            price=Decimal(price) if price else None
+        )
+        if not validation_result.is_valid:
+            errors = '; '.join(validation_result.errors)
+            logger.error(f"Order validation failed for {symbol}: {errors}")
+            raise BinanceAPIException(f"Order validation failed: {errors}")
+        if validation_result.warnings:
+            warnings = '; '.join(validation_result.warnings)
+            logger.warning(f"Order validation warnings for {symbol}: {warnings}")
+            # Adjust with recommended values
+            quantity = float(validation_result.adjusted_quantity)
+            if price:
+                price = float(validation_result.adjusted_price)
+        
         params = {
             'symbol': normalized_symbol,
             'side': side,
@@ -333,7 +357,19 @@ class BinanceClient:
         # Add any additional parameters
         params.update(kwargs)
         
-        return self._request('POST', 'order', params=params, signed=True)
+        attempt = 0
+        max_attempts = 3
+        while attempt < max_attempts:
+            try:
+                return self._request('POST', 'order', params=params, signed=True)
+            except BinanceAPIException as e:
+                logger.error(f"Order attempt {attempt+1} for {symbol} failed: {str(e)}")
+                if not retry:
+                    raise
+                attempt += 1
+                time.sleep(2 ** attempt)  # Exponential backoff
+        # If all retries fail
+        raise BinanceAPIException(f"Failed to create order for {symbol} after {max_attempts} attempts")
     
     def get_open_orders(self, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
         """

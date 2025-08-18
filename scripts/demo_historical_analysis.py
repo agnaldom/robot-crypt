@@ -12,11 +12,12 @@ from datetime import datetime, timedelta
 from typing import List
 
 # Adiciona o diretório src ao path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from api.binance.client import BinanceClient
-from api.binance.historical_data_manager import HistoricalDataManager
-from core.logging_setup import logger
+from src.api.binance.client import BinanceClient
+from src.api.binance.historical_data_manager import HistoricalDataManager
+from src.core.logging_setup import logger
 
 
 async def demo_single_symbol_analysis():

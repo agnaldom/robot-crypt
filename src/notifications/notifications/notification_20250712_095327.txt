@@ -1,0 +1,32 @@
+Data: 2025-07-12 09:53:27
+Mensagem: 📈 ANÁLISE DE DOGE/USDT (15m) CONCLUÍDA - 2 sinais encontrados
+⏱️ Executada em 2.59s às 12/07/2025 09:53:26
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 70.00%)
+   🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜
+   📝 Razão: Padrão Shooting Star detectado
+
+🟢 Sinal 2: BUY (confiança: 68.75%)
+   🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜
+   📝 Razão: Múltiplos sinais: EMA 9 cruzou acima da EMA 21; Volume crescente detectado - possível movimento de alta
+
+🤖 COMPARAÇÃO DE ANÁLISES
+✅ Tradicional: BUY
+🤖 IA: SELL (conf: 70.00%) - 2 sinais
+⚠️ Divergência: Tradicional(buy) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: Conflito entre análises: tradicional (BUY) vs IA (SELL) - Confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: DOGE/USDT | TF: 15m | Duração: 2.59s
+📊 Sistema: IA + Análise Tradicional

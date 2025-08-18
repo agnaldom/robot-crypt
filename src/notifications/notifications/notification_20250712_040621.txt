@@ -1,0 +1,32 @@
+Data: 2025-07-12 04:06:21
+Mensagem: 📈 ANÁLISE DE ETH/USDT (15m) CONCLUÍDA - 2 sinais encontrados
+⏱️ Executada em 3.57s às 12/07/2025 04:06:20
+
+🔔 SINAIS DETECTADOS
+🔴 Sinal 1: SELL (confiança: 80.00%)
+   🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜
+   📝 Razão: Padrão Breakdown Low detectado
+
+🟢 Sinal 2: BUY (confiança: 66.00%)
+   🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜
+   📝 Razão: Múltiplos sinais: Pico de volume detectado com tendência up; Volume crescente detectado - possível movimento de alta
+
+🤖 COMPARAÇÃO DE ANÁLISES
+❌ Tradicional: HOLD
+🤖 IA: SELL (conf: 80.00%) - 3 sinais
+⚠️ Divergência: Tradicional(None) vs IA(sell)
+
+⚖️ AVALIAÇÃO DE RISCO
+🟢 Nível: LOW (score: 0.00)
+   ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜
+📋 Recomendações: Risco baixo - condições favoráveis para trading
+
+🌐 SENTIMENTO DO MERCADO
+😐 Sentimento: NEUTRAL (score: +0.00, conf: 10.0%)
+
+⏸️ DECISÃO FINAL: AGUARDAR
+📝 Motivo: IA sugere SELL (conf: 80.0%), mas análise tradicional não confirma e risco/confiança insuficiente
+
+──────────────────────────────
+🔧 Dados técnicos: ETH/USDT | TF: 15m | Duração: 3.57s
+📊 Sistema: IA + Análise Tradicional
